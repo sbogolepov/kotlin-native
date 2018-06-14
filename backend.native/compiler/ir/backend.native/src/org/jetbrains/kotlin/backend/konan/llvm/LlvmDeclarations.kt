@@ -42,10 +42,10 @@ internal class LlvmDeclarations(
         private val staticFields: Map<IrField, StaticFieldLlvmDeclarations>,
         private val unique: Map<UniqueKind, UniqueLlvmDeclarations>) {
     fun forFunction(descriptor: FunctionDescriptor) = functions[descriptor] ?:
-            error(descriptor.toString())
+            error("${descriptor.toString()} ${descriptor.name} in ${(descriptor.parent as IrDeclaration).name}")
 
     fun forClass(descriptor: ClassDescriptor) = classes[descriptor] ?:
-            error(descriptor.toString())
+            error("$descriptor ${descriptor.name}")
 
     fun forField(descriptor: IrField) = fields[descriptor] ?:
             error(descriptor.toString())
@@ -203,7 +203,9 @@ private class DeclarationsGeneratorVisitor(override val context: Context) :
     }
 
     override fun visitClass(declaration: IrClass) {
-        this.classes[declaration] = createClassDeclarations(declaration)
+       // println("### createClassDeclarations")
+       // println("   declaration = $declaration ${declaration.name}")
+       this.classes[declaration] = createClassDeclarations(declaration)
 
         super.visitClass(declaration)
     }
