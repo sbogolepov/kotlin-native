@@ -40,6 +40,8 @@
 #define COLLECT_STATISTIC 0
 // Auto-adjust GC thresholds.
 #define GC_ERGONOMICS 1
+// If GC is shared across the runtime.
+#define SHARED_GC 1
 
 namespace {
 
@@ -258,7 +260,7 @@ struct MemoryState {
   ContainerHeader* finalizerQueue;
   int finalizerQueueSize;
   int finalizerQueueSuspendCount;
-  /*
+  /**
    * Typical scenario for GC is as following:
    * we have 90% of objects with refcount = 0 which will be deleted during
    * the first phase of the algorithm.
@@ -266,14 +268,21 @@ struct MemoryState {
    * and thus requiring only one list, but the downside is that both of the
    * next phases would iterate over the whole list of objects instead of only 10%.
    */
-  ContainerHeaderList* toFree; // List of all cycle candidates.
-  ContainerHeaderList* roots; // Real candidates excluding those with refcount = 0.
+  ContainerHeaderList* toFree;  // List of all cycle candidates.
   // How many GC suspend requests happened.
   int gcSuspendCount;
+  //  If collection is in progress.
+  bool gcInProgress;
+
+#if SHARED_GC
+  ContainerHeaderList* toFreeSwap[2];  // List of all cycle candidates.
+  int epoque;  // Current epoque in this state. Only used by the collector. TODO: do we need it here?
+#else  // SHARED_GC
+  ContainerHeaderList* roots; // Real candidates excluding those with refcount = 0.
+#endif  // SHARED_GC
+
   // How many candidate elements in toFree shall trigger collection.
   size_t gcThreshold;
-  // If collection is in progress.
-  bool gcInProgress;
 
 #if GC_ERGONOMICS
   uint64_t lastGcTimestamp;
@@ -316,7 +325,40 @@ struct MemoryState {
   #define DEINIT_STAT(state)
   #define PRINT_STAT(state)
 #endif // COLLECT_STATISTIC
+};  // struct MemoryState
+
+#if SHARED_GC
+/**
+ * Theory of operations.
+ *
+ * Shared collector can run in any thread, but only in a single one at the moment.
+ * It doesn't block mutations, instead all mutations happen in-place, reference addition
+ * happens in-place as well, and reference releases to non-zero value are reported to the
+ * to the thread-local buffer.
+ * Each thread keeps two buffers for references to process, and they are switched by the collector,
+ * so that one is used by the single reader (collector) and another one is being written by the single writer.
+ * TODO: shall we use single lock-free deque?
+ *
+ * Any thread could request collector execution if its local release queue size is above threshold. If collector is
+ * already running, we just add ourselves to the queue of threads to process, and then mutators can proceed.
+ * Collector will re-check the queue, and may run either it in same or some other thread (i.e. in another mutator).
+ *
+ * This way collector can liberally use objectCount_ word of the container without risk of concurrent mutation,
+ * and can use concurrent modified trial deletion based on Bacon's paper without risks of collision.
+ */
+struct CollectorState {
+  // Memory states with overflown release counters.
+  KStdDeque<MemoryState*>* toCollect;
+  // Roots collected by cyclic collector.
+  ContainerHeaderList* roots;
+  // Taken when GC is running.
+  int lock;
+  // Current epoque number.
+  int epoque;
 };
+
+CollectorState* collectorState;
+#endif  // SHARED_GC
 
 #if TRACE_MEMORY
 #define INIT_TRACE(state) \
@@ -622,7 +664,7 @@ inline void DecrementRC(ContainerHeader* container) {
       container->setColorAssertIfGreen(CONTAINER_TAG_GC_PURPLE);
       if (!container->buffered()) {
         container->setBuffered();
-        auto state = memoryState;
+        auto* state = memoryState;
         state->toFree->push_back(container);
         if (state->gcSuspendCount == 0 && freeableSize(state) >= state->gcThreshold) {
           GarbageCollect();
@@ -633,6 +675,27 @@ inline void DecrementRC(ContainerHeader* container) {
     }
   }
 }
+
+#if SHARED_GC
+inline void DecrementRCShared(ContainerHeader* container) {
+  if (container->decRefCount<true>() == 0) {
+      FreeContainer(container);
+    } else {
+      int color = container->color();
+      if (color != CONTAINER_TAG_GC_PURPLE && color != CONTAINER_TAG_GC_GREEN) {
+        container->setColorAssertIfGreen(CONTAINER_TAG_GC_PURPLE);
+        if (!container->buffered()) {
+          container->setBuffered();
+          auto* state = memoryState;
+          state->toFree->push_back(container);
+          if (state->gcSuspendCount == 0 && freeableSize(state) >= state->gcThreshold) {
+            GarbageCollect();
+           }
+         }
+      }
+    }
+}
+#endif
 
 inline void initThreshold(MemoryState* state, uint32_t gcThreshold) {
   state->gcThreshold = gcThreshold;
@@ -702,9 +765,9 @@ void dumpReachable(const char* prefix, const ContainerHeaderSet* roots) {
 
 #if USE_GC
 
-void MarkRoots(MemoryState*);
-void ScanRoots(MemoryState*);
-void CollectRoots(MemoryState*);
+void MarkRoots(MemoryState*, ContainerHeaderList* roots);
+void ScanRoots(MemoryState*, ContainerHeaderList* roots);
+void CollectRoots(MemoryState*, ContainerHeaderList* roots);
 void Scan(ContainerHeader* container);
 
 template<bool useColor>
@@ -777,16 +840,16 @@ void ScanBlack(ContainerHeader* start) {
 
 void CollectWhite(MemoryState*, ContainerHeader* container);
 
-void CollectCycles(MemoryState* state) {
-  MarkRoots(state);
-  ScanRoots(state);
-  CollectRoots(state);
+void CollectCycles(MemoryState* state, ContainerHeaderList* roots) {
+  MarkRoots(state, roots);
+  ScanRoots(state, roots);
+  CollectRoots(state, roots);
   state->toFree->clear();
-  state->roots->clear();
+  roots->clear();
 }
 
-void MarkRoots(MemoryState* state) {
-  for (auto container : *(state->toFree)) {
+void MarkRoots(MemoryState* state, ContainerHeaderList* roots) {
+  for (auto* container : *(state->toFree)) {
     if (isMarkedAsRemoved(container))
       continue;
     // Acyclic containers cannot be in this list.
@@ -795,7 +858,7 @@ void MarkRoots(MemoryState* state) {
     auto rcIsZero = container->refCount() == 0;
     if (color == CONTAINER_TAG_GC_PURPLE && !rcIsZero) {
       MarkGray<true>(container);
-      state->roots->push_back(container);
+      roots->push_back(container);
     } else {
       container->resetBuffered();
       RuntimeAssert(color != CONTAINER_TAG_GC_GREEN, "Must not be green");
@@ -806,17 +869,17 @@ void MarkRoots(MemoryState* state) {
   }
 }
 
-void ScanRoots(MemoryState* state) {
-  for (auto* container : *(state->roots)) {
+void ScanRoots(MemoryState* state, ContainerHeaderList* roots) {
+  for (auto* container : *roots) {
     Scan(container);
   }
 }
 
-void CollectRoots(MemoryState* state) {
+void CollectRoots(MemoryState* state, ContainerHeaderList* roots) {
   // Here we might free some objects and call deallocation hooks on them,
   // which in turn might call DecrementRC and trigger new GC - forbid that.
   state->gcSuspendCount++;
-  for (auto* container : *(state->roots)) {
+  for (auto* container : *roots) {
     container->resetBuffered();
     CollectWhite(state, container);
   }
@@ -873,9 +936,13 @@ void CollectWhite(MemoryState* state, ContainerHeader* start) {
 #endif
 
 inline void AddRef(ContainerHeader* header) {
+#if SHARED_GC
+  if (header->tag() != CONTAINER_TAG_STACK)
+    IncrementRC</* Atomic = */ true>(header);
+#else
   // Looking at container type we may want to skip AddRef() totally
-  // (non-escaping stack objects, constant objects).
-  switch (header->refCount_ & CONTAINER_TAG_MASK) {
+  // for non-escaping stack objects.
+  switch (header->tag()) {
     case CONTAINER_TAG_STACK:
       break;
     case CONTAINER_TAG_NORMAL:
@@ -886,11 +953,16 @@ inline void AddRef(ContainerHeader* header) {
       IncrementRC</* Atomic = */ true>(header);
       break;
   }
+#endif  // SHARED_GC
 }
 
 inline void ReleaseRef(ContainerHeader* header) {
+#if SHARED_GC
+  if (header->tag() != CONTAINER_TAG_STACK)
+    DecrementRCShared(header);
+#else
   // Looking at container type we may want to skip ReleaseRef() totally
-  // (non-escaping stack objects, constant objects).
+  // for non-escaping stack objects.
   switch (header->tag()) {
     case CONTAINER_TAG_STACK:
       break;
@@ -902,6 +974,7 @@ inline void ReleaseRef(ContainerHeader* header) {
       DecrementRC</* Atomic = */ true, /* UseCyclicCollector = */ false>(header);
       break;
   }
+#endif  // SHARED_GC
 }
 
 // We use first slot as place to store frame-local arena container.
@@ -1209,32 +1282,52 @@ MemoryState* InitMemory() {
                 "Layout mismatch");
   RuntimeAssert(sizeof(FrameOverlay) % sizeof(ObjHeader**) == 0, "Frame overlay should contain only pointers")
   RuntimeAssert(memoryState == nullptr, "memory state must be clear");
+  if (atomicAdd(&aliveMemoryStatesCount, 1) == 1) {
+#if SHARED_GC
+    // This code is executed only on the first runtime init.
+    collectorState = konanConstructInstance<CollectorState>();
+    collectorState->roots = konanConstructInstance<ContainerHeaderList>();
+#endif
+  }
   memoryState = konanConstructInstance<MemoryState>();
   INIT_EVENT(memoryState)
 #if USE_GC
+#if SHARED_GC
+  memoryState->toFreeSwap[0] = konanConstructInstance<ContainerHeaderList>();
+  memoryState->toFreeSwap[1] = konanConstructInstance<ContainerHeaderList>();
+  memoryState->toFree = memoryState->toFreeSwap[0];
+#else  // SHARED_GC
   memoryState->toFree = konanConstructInstance<ContainerHeaderList>();
   memoryState->roots = konanConstructInstance<ContainerHeaderList>();
   memoryState->gcInProgress = false;
+#endif
   initThreshold(memoryState, kGcThreshold);
   memoryState->gcSuspendCount = 0;
 #endif
-  atomicAdd(&aliveMemoryStatesCount, 1);
+
   return memoryState;
 }
 
 void DeinitMemory(MemoryState* memoryState) {
 #if USE_GC
   GarbageCollect();
-  RuntimeAssert(memoryState->toFree->size() == 0, "Some memory have not been released after GC");
-  konanDestructInstance(memoryState->toFree);
-  konanDestructInstance(memoryState->roots);
+#if SHARED_GC
+  RuntimeAssert(::memoryState->toFreeSwap[0]->size() == 0, "Some memory have not been released after GC");
+  RuntimeAssert(::memoryState->toFreeSwap[1]->size() == 0, "Some memory have not been released after GC");
+  konanDestructInstance(::memoryState->toFreeSwap[0]);
+  konanDestructInstance(::memoryState->toFreeSwap[1]);
+#else
+  RuntimeAssert(::memoryState->toFree->size() == 0, "Some memory have not been released after GC");
+  konanDestructInstance(::memoryState->toFree);
+  konanDestructInstance(::memoryState->roots);
+#endif
 
-  RuntimeAssert(memoryState->finalizerQueue == nullptr, "Finalizer queue must be empty");
-  RuntimeAssert(memoryState->finalizerQueueSize == 0, "Finalizer queue must be empty");
+  RuntimeAssert(::memoryState->finalizerQueue == nullptr, "Finalizer queue must be empty");
+  RuntimeAssert(::memoryState->finalizerQueueSize == 0, "Finalizer queue must be empty");
 
 #endif // USE_GC
 
-  bool lastMemoryState = atomicAdd(&aliveMemoryStatesCount, -1) == 0;
+  bool lastMemoryState = atomicSub(&aliveMemoryStatesCount, 1) == 0;
 
 #if TRACE_MEMORY
   if (lastMemoryState && allocCount > 0) {
@@ -1243,15 +1336,21 @@ void DeinitMemory(MemoryState* memoryState) {
   }
 #else
 #if USE_GC
-  if (lastMemoryState)
+  if (lastMemoryState) {
     RuntimeAssert(allocCount == 0, "Memory leaks found");
+#if SHARED_GC
+    konanDestructInstance(::collectorState->roots);
+    konanDestructInstance(::collectorState);
+    ::collectorState = nullptr;
+#endif
+  }
 #endif
 #endif
 
-  PRINT_EVENT(memoryState)
-  DEINIT_EVENT(memoryState)
+  PRINT_EVENT(::memoryState)
+  DEINIT_EVENT(::memoryState)
 
-  konanFreeMemory(memoryState);
+  konanFreeMemory(::memoryState);
   ::memoryState = nullptr;
 }
 
@@ -1504,8 +1603,14 @@ void GarbageCollect() {
 
   processFinalizerQueue(state);
 
+#if SHARED_GC
+  auto* roots = collectorState->roots;
+#else
+  auto* roots = memoryState->roots;
+#endif
+
   while (state->toFree->size() > 0) {
-    CollectCycles(state);
+    CollectCycles(state, roots);
     processFinalizerQueue(state);
   }
 
@@ -1524,7 +1629,7 @@ void GarbageCollect() {
   MEMORY_LOG("Garbage collect: GC length=%lld sinceLast=%lld\n",
              (gcEndTime - gcStartTime), gcStartTime - state->lastGcTimestamp);
   state->lastGcTimestamp = gcEndTime;
-#endif
+#endif  // GC_ERGONOMICS
 }
 
 #endif // USE_GC
@@ -1538,7 +1643,7 @@ void Kotlin_native_internal_GC_collect(KRef) {
 void Kotlin_native_internal_GC_suspend(KRef) {
 #if USE_GC
   memoryState->gcSuspendCount++;
-#endif
+#endif  // USE_GC
 }
 
 void Kotlin_native_internal_GC_resume(KRef) {
@@ -1551,41 +1656,49 @@ void Kotlin_native_internal_GC_resume(KRef) {
       GarbageCollect();
     }
   }
-#endif
+#endif  // USE_GC
 }
 
 void Kotlin_native_internal_GC_stop(KRef) {
 #if USE_GC
-  if (memoryState->toFree != nullptr) {
+#if SHARED_GC
+  ThrowNotImplementedError();
+#else
+  if (::memoryState->toFree != nullptr) {
     GarbageCollect();
-    konanDestructInstance(memoryState->toFree);
-    konanDestructInstance(memoryState->roots);
-    memoryState->toFree = nullptr;
-    memoryState->roots = nullptr;
+    konanDestructInstance(::memoryState->toFree);
+    konanDestructInstance(::memoryState->roots);
+    ::memoryState->toFree = nullptr;
+    ::memoryState->roots = nullptr;
   }
-#endif
+#endif  // SHARED_GC
+#endif  // USE_GC
 }
 
 void Kotlin_native_internal_GC_start(KRef) {
 #if USE_GC
-  if (memoryState->toFree == nullptr) {
-    memoryState->toFree = konanConstructInstance<ContainerHeaderList>();
-    memoryState->roots = konanConstructInstance<ContainerHeaderList>();
+#if SHARED_GC
+  ThrowNotImplementedError();
+#else
+  if (::memoryState->toFree == nullptr) {
+    ::memoryState->toFree = konanConstructInstance<ContainerHeaderList>();
+    ::memoryState->roots = konanConstructInstance<ContainerHeaderList>();
   }
+#endif
 #endif
 }
 
 void Kotlin_native_internal_GC_setThreshold(KRef, KInt value) {
 #if USE_GC
   if (value > 0) {
-    initThreshold(memoryState, value);
+    initThreshold(::memoryState, value);
   }
 #endif
 }
 
 KInt Kotlin_native_internal_GC_getThreshold(KRef) {
 #if USE_GC
-  return memoryState->gcThreshold;
+  return ::memoryState->gcThreshold;
 #else
   return -1;
 #endif
@@ -1915,8 +2028,7 @@ OBJ_GETTER(ReadRefLocked, ObjHeader** location, int32_t* spinlock) {
   lock(spinlock);
   ObjHeader* value = *location;
   // We do not use UpdateRef() here to avoid having ReleaseRef() on return slot under the lock.
-  if (value != nullptr)
-    AddRef(value);
+  if (value != nullptr) AddRef(value);
   unlock(spinlock);
   updateReturnRefAdded(OBJ_RESULT, value);
   return value;
