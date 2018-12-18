@@ -332,16 +332,16 @@ struct MemoryState {
  * Theory of operations.
  *
  * Shared collector can run in any thread, but only in a single one at the moment.
- * It doesn't block mutations, instead all mutations happen in-place, reference addition
- * happens in-place as well, and reference releases to non-zero value are reported to the
- * to the thread-local buffer.
+ * It doesn't block mutations, instead all mutations happen in situ, reference addition
+ * happens in situ as well, and reference releases to non-zero value are reported to the
+ * thread-local buffer.
  * Each thread keeps two buffers for references to process, and they are switched by the collector,
  * so that one is used by the single reader (collector) and another one is being written by the single writer.
  * TODO: shall we use single lock-free deque?
  *
  * Any thread could request collector execution if its local release queue size is above threshold. If collector is
- * already running, we just add ourselves to the queue of threads to process, and then mutators can proceed.
- * Collector will re-check the queue, and may run either it in same or some other thread (i.e. in another mutator).
+ * already running, we just add ourselves to the queue of threads to process, and then mutator can proceed.
+ * Collector will re-check the queue, and may process in same or some other thread (i.e. in another mutator).
  *
  * This way collector can liberally use objectCount_ word of the container without risk of concurrent mutation,
  * and can use concurrent modified trial deletion based on Bacon's paper without risks of collision.
@@ -877,7 +877,7 @@ void ScanRoots(MemoryState* state, ContainerHeaderList* roots) {
 
 void CollectRoots(MemoryState* state, ContainerHeaderList* roots) {
   // Here we might free some objects and call deallocation hooks on them,
-  // which in turn might call DecrementRC and trigger new GC - forbid that.
+  // which in turn might call DecrementRC() and trigger new GC - forbid that.
   state->gcSuspendCount++;
   for (auto* container : *roots) {
     container->resetBuffered();
@@ -1043,7 +1043,7 @@ ContainerHeader* AllocContainer(size_t size) {
   auto state = memoryState;
 #if USE_GC
   // TODO: try to reuse elements of finalizer queue for new allocations, question
-  // is how to get actual size of container.
+  // is how to get the actual size of container.
 #endif
   ContainerHeader* result = konanConstructSizedInstance<ContainerHeader>(alignUp(size, kObjectAlignment));
   CONTAINER_ALLOC_EVENT(state, size, result);
@@ -1054,11 +1054,11 @@ ContainerHeader* AllocContainer(size_t size) {
   return result;
 }
 
-ContainerHeader* AllocAggregatingFrozenContainer(KStdVector<ContainerHeader*>& containers) {
-  auto componentSize = containers.size();
+ContainerHeader* AllocAggregatingFrozenContainer(KStdVector<ContainerHeader*>* containers) {
+  auto componentSize = containers->size();
   auto* superContainer = AllocContainer(sizeof(ContainerHeader) + sizeof(void*) * componentSize);
   auto* place = reinterpret_cast<ContainerHeader**>(superContainer + 1);
-  for (auto* container : containers) {
+  for (auto* container : *containers) {
     *place++ = container;
     // Set link to the new container.
     auto* obj = reinterpret_cast<ObjHeader*>(container + 1);
@@ -1136,8 +1136,7 @@ void ObjectContainer::Init(const TypeInfo* typeInfo) {
 
 void ArrayContainer::Init(const TypeInfo* typeInfo, uint32_t elements) {
   RuntimeAssert(typeInfo->instanceSize_ < 0, "Must be an array");
-  uint32_t alloc_size =
-      sizeof(ContainerHeader) + arrayObjectSize(typeInfo, elements);
+  uint32_t alloc_size = sizeof(ContainerHeader) + arrayObjectSize(typeInfo, elements);
   header_ = AllocContainer(alloc_size);
   RuntimeAssert(header_ != nullptr, "Cannot alloc memory");
   if (header_) {
@@ -1152,7 +1151,7 @@ void ArrayContainer::Init(const TypeInfo* typeInfo, uint32_t elements) {
   }
 }
 
-// TODO: store arena containers in some reuseable data structure, similar to
+// TODO: store arena containers in some reuseable data structure, similar to the
 // finalizer queue.
 void ArenaContainer::Init() {
   allocContainer(1024);
@@ -1750,7 +1749,7 @@ bool hasExternalRefs(ContainerHeader* start, ContainerHeaderSet* visited) {
   }
   return false;
 }
-#endif
+#endif  // USE_GC
 
 bool ClearSubgraphReferences(ObjHeader* root, bool checked) {
 #if USE_GC
@@ -1760,7 +1759,7 @@ bool ClearSubgraphReferences(ObjHeader* root, bool checked) {
 
     if (container == nullptr || container->frozen())
       // We assume, that frozen objects can be safely passed and are already removed
-      // GC candidate list.
+      // from the GC candidate list.
       return true;
 
     ContainerHeaderSet visited;
@@ -1787,6 +1786,8 @@ bool ClearSubgraphReferences(ObjHeader* root, bool checked) {
       }
     }
   }
+#else
+  RuntimeCheck(false, "This operation requires GC support");
 #endif  // USE_GC
   return true;
 }
@@ -1799,7 +1800,7 @@ bool ClearSubgraphReferences(ObjHeader* root, bool checked) {
   * When we see GREY during DFS, it means we see cycle.
   */
 void depthFirstTraversal(ContainerHeader* container, bool* hasCycles,
-                         KRef* firstBlocker, KStdVector<ContainerHeader*>& order) {
+                         KRef* firstBlocker, KStdVector<ContainerHeader*>* order) {
   // Mark GRAY.
   container->setSeen();
 
@@ -1817,6 +1818,7 @@ void depthFirstTraversal(ContainerHeader* container, bool* hasCycles,
 
         // Go deeper if WHITE.
         if (!objContainer->seen() && !objContainer->marked()) {
+          // TODO: remove recursion.
           depthFirstTraversal(objContainer, hasCycles, firstBlocker, order);
         }
       }
@@ -1824,7 +1826,7 @@ void depthFirstTraversal(ContainerHeader* container, bool* hasCycles,
   // Mark BLACK.
   container->resetSeen();
   container->mark();
-  order.push_back(container);
+  order->push_back(container);
 }
 
 void traverseStronglyConnectedComponent(ContainerHeader* container,
@@ -1923,7 +1925,7 @@ void freezeCyclic(ContainerHeader* rootContainer, const KStdVector<ContainerHead
       container->setRefCount(0);
     }
     // Create fictitious container for the whole component.
-    auto superContainer = component.size() == 1 ? component[0] : AllocAggregatingFrozenContainer(component);
+    auto superContainer = component.size() == 1 ? component[0] : AllocAggregatingFrozenContainer(&component);
     // Don't count internal references.
     superContainer->setRefCount(totalCount - internalRefsCount);
   }
@@ -1964,7 +1966,7 @@ void FreezeSubgraph(ObjHeader* root) {
   KRef firstBlocker = root->has_meta_object() && ((root->meta_object()->flags_ & MF_NEVER_FROZEN) != 0) ?
     root : nullptr;
   KStdVector<ContainerHeader*> order;
-  depthFirstTraversal(rootContainer, &hasCycles, &firstBlocker, order);
+  depthFirstTraversal(rootContainer, &hasCycles, &firstBlocker, &order);
   if (firstBlocker != nullptr) {
     ThrowFreezingException(root, firstBlocker);
   }
@@ -1972,7 +1974,7 @@ void FreezeSubgraph(ObjHeader* root) {
   if (hasCycles) {
     freezeCyclic(rootContainer, order);
   } else {
-    freezeAcyclic(rootContainer );
+    freezeAcyclic(rootContainer);
   }
 
 #if USE_GC

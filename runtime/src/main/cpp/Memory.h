@@ -42,6 +42,7 @@ typedef enum {
 
   // Shift to get actual object count.
   CONTAINER_TAG_GC_SHIFT     = 6,
+
   CONTAINER_TAG_GC_INCREMENT = 1 << CONTAINER_TAG_GC_SHIFT,
   // Color mask of a container.
   CONTAINER_TAG_COLOR_SHIFT   = 3,
