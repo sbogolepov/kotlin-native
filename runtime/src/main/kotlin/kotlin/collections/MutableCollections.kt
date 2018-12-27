@@ -5,12 +5,10 @@
 
 package kotlin.collections
 
-import kotlin.comparisons.*
-
 /**
  * Sorts elements in the list in-place according to their natural sort order.
  */
-public actual fun <T : Comparable<T>> MutableList<T>.sort(): Unit = sortWith(Comparator<T> { a: T, b: T -> a.compareTo(b) })
+public actual fun <T : Comparable<T>> MutableList<T>.sort(): Unit = sortWith(naturalOrder())
 
 /**
  * Sorts elements in the list in-place according to the order specified with [comparator].
@@ -18,7 +16,7 @@ public actual fun <T : Comparable<T>> MutableList<T>.sort(): Unit = sortWith(Com
 public actual fun <T> MutableList<T>.sortWith(comparator: Comparator<in T>): Unit {
     if (size > 1) {
         val it = listIterator()
-        val sortedArray = @Suppress("TYPE_PARAMETER_AS_REIFIED") toTypedArray().apply { sortWith(comparator) }
+        val sortedArray = @Suppress("UNCHECKED_CAST") (toTypedArray<Any?>() as Array<T>).apply { sortWith(comparator) }
         for (v in sortedArray) {
             it.next()
             it.set(v)
