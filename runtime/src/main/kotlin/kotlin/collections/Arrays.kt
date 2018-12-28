@@ -12,7 +12,7 @@ import kotlin.internal.PureReifiable
 public actual inline fun <reified T> Array<out T>?.orEmpty(): Array<out T> = this ?: emptyArray<T>()
 
 
-@PublishedApi internal inline fun checkCopyOfRangeArguments(fromIndex: Int, toIndex: Int, size: Int) {
+internal fun checkCopyOfRangeArguments(fromIndex: Int, toIndex: Int, size: Int) {
     if (toIndex > size)
         throw IndexOutOfBoundsException("toIndex ($toIndex) is greater than size ($size).")
     if (fromIndex > toIndex)
