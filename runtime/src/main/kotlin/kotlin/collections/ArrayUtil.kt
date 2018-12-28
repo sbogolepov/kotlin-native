@@ -99,8 +99,7 @@ internal fun IntArray.fill(fromIndex: Int, toIndex: Int, value: Int) {
 
 @SymbolName("Kotlin_Array_copyImpl")
 @PointsTo(0b000100, 0, 0b000001) // <array> points to <destination>, <destination> points to <array>.
-internal external fun arrayCopy(array: Array<Any?>, fromIndex: Int,
-                         destination: Array<Any?>, toIndex: Int, count: Int)
+internal external fun arrayCopy(array: Array<Any?>, fromIndex: Int, destination: Array<Any?>, toIndex: Int, count: Int)
 
 @SymbolName("Kotlin_ByteArray_copyImpl")
 internal external fun arrayCopy(array: ByteArray, fromIndex: Int, destination: ByteArray, toIndex: Int, count: Int)
@@ -117,39 +116,17 @@ internal external fun arrayCopy(array: IntArray, fromIndex: Int, destination: In
 @SymbolName("Kotlin_LongArray_copyImpl")
 internal external fun arrayCopy(array: LongArray, fromIndex: Int, destination: LongArray, toIndex: Int, count: Int)
 
-// Note: [arrayCopy] for an unsigned array is bitwise identical to signed type, so
-// signed array implementations from runtime are directly reused for unsigned ones.
-
-@ExperimentalUnsignedTypes
-@SymbolName("Kotlin_ByteArray_copyImpl")
-internal external fun arrayCopy(array: UByteArray, fromIndex: Int, destination: UByteArray, toIndex: Int, count: Int)
-
-@ExperimentalUnsignedTypes
-@SymbolName("Kotlin_ShortArray_copyImpl")
-internal external fun arrayCopy(array: UShortArray, fromIndex: Int, destination: UShortArray, toIndex: Int, count: Int)
-
-@ExperimentalUnsignedTypes
-@SymbolName("Kotlin_IntArray_copyImpl")
-internal external fun arrayCopy(array: UIntArray, fromIndex: Int,
-                              destination: UIntArray, toIndex: Int, count: Int)
-
-@ExperimentalUnsignedTypes
-@SymbolName("Kotlin_LongArray_copyImpl")
-internal external fun arrayCopy(array: ULongArray, fromIndex: Int,
-                              destination: ULongArray, toIndex: Int, count: Int)
-
-
 @SymbolName("Kotlin_FloatArray_copyImpl")
-internal external fun arrayCopy(array: FloatArray, fromIndex: Int,
-                              destination: FloatArray, toIndex: Int, count: Int)
+internal external fun arrayCopy(array: FloatArray, fromIndex: Int, destination: FloatArray, toIndex: Int, count: Int)
 
 @SymbolName("Kotlin_DoubleArray_copyImpl")
-internal external fun arrayCopy(array: DoubleArray, fromIndex: Int,
-                              destination: DoubleArray, toIndex: Int, count: Int)
+internal external fun arrayCopy(array: DoubleArray, fromIndex: Int, destination: DoubleArray, toIndex: Int, count: Int)
 
 @SymbolName("Kotlin_BooleanArray_copyImpl")
-internal external fun arrayCopy(array: BooleanArray, fromIndex: Int,
-                              destination: BooleanArray, toIndex: Int, count: Int)
+internal external fun arrayCopy(array: BooleanArray, fromIndex: Int, destination: BooleanArray, toIndex: Int, count: Int)
+
+
+// TODO: Remove references to copyRangeTo from IR backend
 
 /**
  * Copies a range of array elements at a specified [fromIndex] (inclusive) to [toIndex] (exclusive) range of indices
@@ -183,30 +160,6 @@ internal fun LongArray.copyRangeTo(destination: LongArray, fromIndex: Int, toInd
     arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
 }
 
-@SinceKotlin("1.3")
-@ExperimentalUnsignedTypes
-internal fun UByteArray.copyRangeTo(destination: UByteArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
-    arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
-}
-
-@SinceKotlin("1.3")
-@ExperimentalUnsignedTypes
-internal fun UShortArray.copyRangeTo(destination: UShortArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
-    arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
-}
-
-@SinceKotlin("1.3")
-@ExperimentalUnsignedTypes
-internal fun UIntArray.copyRangeTo(destination: UIntArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
-    arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
-}
-
-@SinceKotlin("1.3")
-@ExperimentalUnsignedTypes
-internal fun ULongArray.copyRangeTo(destination: ULongArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
-    arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
-}
-
 internal fun FloatArray.copyRangeTo(destination: FloatArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
     arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
 }
@@ -217,6 +170,30 @@ internal fun DoubleArray.copyRangeTo(destination: DoubleArray, fromIndex: Int, t
 
 internal fun BooleanArray.copyRangeTo(destination: BooleanArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
     arrayCopy(this, fromIndex, destination, destinationIndex, toIndex - fromIndex)
+}
+
+@SinceKotlin("1.3")
+@ExperimentalUnsignedTypes
+internal fun UByteArray.copyRangeTo(destination: UByteArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
+    copyInto(destination, destinationIndex, fromIndex, toIndex)
+}
+
+@SinceKotlin("1.3")
+@ExperimentalUnsignedTypes
+internal fun UShortArray.copyRangeTo(destination: UShortArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
+    copyInto(destination, destinationIndex, fromIndex, toIndex)
+}
+
+@SinceKotlin("1.3")
+@ExperimentalUnsignedTypes
+internal fun UIntArray.copyRangeTo(destination: UIntArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
+    copyInto(destination, destinationIndex, fromIndex, toIndex)
+}
+
+@SinceKotlin("1.3")
+@ExperimentalUnsignedTypes
+internal fun ULongArray.copyRangeTo(destination: ULongArray, fromIndex: Int, toIndex: Int, destinationIndex: Int = 0) {
+    copyInto(destination, destinationIndex, fromIndex, toIndex)
 }
 
 internal fun <E> Collection<E>.collectionToString(): String {
