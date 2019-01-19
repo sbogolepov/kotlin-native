@@ -43,6 +43,8 @@ class SSABlockArg : SSAValue, SSAUser {
     override val users = mutableSetOf<SSAInstruction>()
 }
 
+class SSAGetObjectValue() : SSAInstructionBase()
+
 sealed class SSAConstant : SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
@@ -80,8 +82,9 @@ interface SSAInstruction: SSAValue {
 
 }
 
-abstract class SSAInstructionBase : SSAInstruction {
-    override val operands: MutableList<SSAValue> = mutableListOf()
+abstract class SSAInstructionBase(
+        override val operands: MutableList<SSAValue> = mutableListOf()
+) : SSAInstruction {
 
     override val users = mutableSetOf<SSAInstruction>()
 
@@ -96,25 +99,33 @@ class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
 
 class SSAPhi(val block: SSABlock): SSAInstructionBase() {
 
-
 }
 
-class SSAReturn(): SSAInstructionBase()
+class SSABr(val target: SSABlock) : SSAInstructionBase(mutableListOf(target))
+
+class SSACondBr(val condition: SSAValue, val truTarget: SSABlock, val flsTarget: SSABlock)
+    : SSAInstructionBase(mutableListOf(condition, truTarget, flsTarget))
+
+class SSAReturn(val retVal: SSAValue): SSAInstructionBase(mutableListOf(retVal))
 
 class SSAFunction(
         val name: String,
         val type: SSAFuncType
 ): SSACallable {
     val entry = SSABlock(this, SSABlockId(0))
+    val blocks = mutableListOf(entry)
 }
 
-class SSABlockId(private val id: Int) {
+class SSABlockId(private val id: Int, val name:String = "") {
     override fun toString(): String {
-        return id.toString()
+        return "${id}_$name"
     }
 }
 
-class SSABlock(val func: SSAFunction, val id: SSABlockId) {
+class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
+
+    override val users = mutableSetOf<SSAInstruction>()
+
     val args = mutableListOf<SSABlockArg>()
     val body: MutableList<SSAInstruction> = mutableListOf()
     val succs: MutableList<SSABlock> = mutableListOf()

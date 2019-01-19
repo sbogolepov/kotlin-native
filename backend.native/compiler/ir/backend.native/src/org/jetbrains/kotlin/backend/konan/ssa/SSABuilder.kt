@@ -208,11 +208,52 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         is IrGetValue -> generateGetValue(irExpr)
         is IrConst<*> -> generateConstant(irExpr)
         is IrReturn -> generateReturn(irExpr)
+        is IrGetObjectValue -> generateGetObjectValue(irExpr)
+        is IrWhileLoop -> generateWhileLoop(irExpr)
+        is IrContainerExpression -> generateContainerExpression(irExpr)
         else -> TODO()
     }
 
+    private fun generateContainerExpression(containerExpr: IrContainerExpression): SSAValue {
+        containerExpr.statements.dropLast(1).forEach { generateStatement(it) }
+        containerExpr.statements.lastOrNull()?.let {
+            if (it is IrExpression) {
+                return generateExpression(it)
+            } else {
+                generateStatement(it)
+            }
+        }
+        return SSAConstant.Undef // TODO: Unit
+    }
+
+    private fun generateWhileLoop(irLoop: IrWhileLoop): SSAValue {
+
+        val loopHeader = SSABlock(func, SSABlockId(3, "header")).add()
+        val loopBody = SSABlock(func, SSABlockId(5, "body")).add()
+        val loopExit = SSABlock(func, SSABlockId(4, "exit")).add()
+
+        SSABr(loopHeader).add()
+
+        curBlock = loopHeader
+        val condition = generateExpression(irLoop.condition)
+        SSACondBr(condition, loopBody, loopExit).add()
+
+        curBlock = loopBody
+        irLoop.body?.let { generateStatement(it) }
+        SSABr(loopHeader).add()
+
+        curBlock = loopExit
+
+        return SSAConstant.Undef // TODO: replace with unit
+    }
+
+    private fun generateGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
+        return SSAGetObjectValue().add()
+    }
+
     private fun generateReturn(irReturn: IrReturn): SSAValue {
-        return SSAReturn().add()
+        val retVal = generateExpression(irReturn.value)
+        return SSAReturn(retVal).add()
     }
 
     private fun generateConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
@@ -238,6 +279,11 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     fun <T: SSAInstruction> T.add(): T {
         curBlock.body += this
+        return this
+    }
+
+    fun SSABlock.add(): SSABlock {
+        func.blocks += this
         return this
     }
 

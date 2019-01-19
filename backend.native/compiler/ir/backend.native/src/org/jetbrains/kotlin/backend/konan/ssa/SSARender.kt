@@ -9,14 +9,16 @@ class SSARender() {
     val slotTracker = SSASlotTracker()
 
     fun render(func: SSAFunction): String = buildString {
-            for (insn in func.entry.body) {
-                slotTracker.track(insn)
-            }
             appendln(func.name)
-            appendln(render(func.entry))
+            for (block in func.blocks) {
+                for (insn in block.body) {
+                    slotTracker.track(insn)
+                }
+                appendln(render(block))
+            }
         }
 
-    fun render(block: SSABlock): String = buildString {
+    private fun render(block: SSABlock): String = buildString {
         appendln("block ${block.id}")
         pad = padDelta
         for (insn in block.body) {
@@ -27,14 +29,18 @@ class SSARender() {
 
     private fun render(insn: SSAInstruction): String = buildString {
         when (insn) {
-            is SSACall -> append("$pad %${slotTracker.slot(insn)} = CALL ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
-            is SSAReturn -> append("$pad RET")
+            is SSACall -> append("$pad %${slotTracker.slot(insn)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
+            is SSAGetObjectValue -> append("$pad %${slotTracker.slot(insn)} = GET OBJECT VALUE")
+            is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
+            is SSABr -> append("$pad br ${renderOperand(insn.target)}")
+            is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truTarget)} ${renderOperand(insn.flsTarget)}")
             else -> append("$pad UNSUPPORTED")
         }
     }
 
     private fun renderOperand(value: SSAValue): String = when {
         value is SSAConstant -> renderConstant(value)
+        value is SSABlock -> "block ${value.id}"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}"
         else -> "UNNAMED"
     }
