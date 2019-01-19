@@ -273,6 +273,9 @@ class K2NativeCompilerArguments : CommonCompilerArguments() {
                     phasesToDumpAfter = arrayOf("ALL")
             }
 
+    @Argument(value = "-ssa",  description = "SSA")
+    var ssa: Boolean = false
+
     override fun checkIrSupport(languageVersionSettings: LanguageVersionSettings, collector: MessageCollector) {
         if (languageVersionSettings.languageVersion < LanguageVersion.KOTLIN_1_4
                 || languageVersionSettings.apiVersion < ApiVersion.KOTLIN_1_4

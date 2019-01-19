@@ -450,6 +450,8 @@ internal class Context(config: KonanConfig) : KonanBackendContext(config) {
         }
     }
 
+    fun ssa(): Boolean = config.configuration.getBoolean(KonanConfigKeys.SSA)
+
     lateinit var debugInfo: DebugInfo
     var moduleDFG: ModuleDFG? = null
     var externalModulesDFG: ExternalModulesDFG? = null

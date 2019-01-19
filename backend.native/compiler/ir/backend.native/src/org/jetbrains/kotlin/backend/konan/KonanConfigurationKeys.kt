@@ -64,11 +64,11 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("provide manifest addend file")
         val MEMORY_MODEL: CompilerConfigurationKey<MemoryModel>
                 = CompilerConfigurationKey.create("memory model")
-        val META_INFO: CompilerConfigurationKey<List<String>> 
+        val META_INFO: CompilerConfigurationKey<List<String>>
                 = CompilerConfigurationKey.create("generate metadata")
         val METADATA_KLIB: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("metadata klib")
-        val MODULE_KIND: CompilerConfigurationKey<ModuleKind> 
+        val MODULE_KIND: CompilerConfigurationKey<ModuleKind>
                 = CompilerConfigurationKey.create("module kind")
         val MODULE_NAME: CompilerConfigurationKey<String?> 
                 = CompilerConfigurationKey.create("module name")
@@ -78,7 +78,7 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("don't link with the default libraries")
         val NOENDORSEDLIBS: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("don't link with the endorsed libraries")
-        val NOMAIN: CompilerConfigurationKey<Boolean> 
+        val NOMAIN: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("assume 'main' entry point to be provided by external libraries")
         val NOSTDLIB: CompilerConfigurationKey<Boolean> 
                 = CompilerConfigurationKey.create("don't link with stdlib")
@@ -92,7 +92,7 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("arguments for clang")
         val ALLOCATION_MODE: CompilerConfigurationKey<String>
                 = CompilerConfigurationKey.create("allocation mode")
-        val PRINT_BITCODE: CompilerConfigurationKey<Boolean> 
+        val PRINT_BITCODE: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("print bitcode")
         val PRINT_DESCRIPTORS: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("print descriptors")
@@ -112,7 +112,7 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("override default runtime file path")
         val INCLUDED_LIBRARIES: CompilerConfigurationKey<List<String>>
                 = CompilerConfigurationKey("klibs processed in the same manner as source files")
-        val SOURCE_MAP: CompilerConfigurationKey<List<String>> 
+        val SOURCE_MAP: CompilerConfigurationKey<List<String>>
                 = CompilerConfigurationKey.create("generate source map")
         val SHORT_MODULE_NAME: CompilerConfigurationKey<String?>
                 = CompilerConfigurationKey("short module name for IDE and export")
@@ -136,6 +136,9 @@ class KonanConfigKeys {
                 = CompilerConfigurationKey.create("path to *.profraw coverage output")
         val OBJC_GENERICS: CompilerConfigurationKey<Boolean>
                 = CompilerConfigurationKey.create("write objc header with generics support")
+        val SSA: CompilerConfigurationKey<Boolean>
+                = CompilerConfigurationKey.create("ssa")
+
     }
 }
 

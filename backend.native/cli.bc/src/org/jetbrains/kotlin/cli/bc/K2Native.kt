@@ -246,6 +246,8 @@ class K2Native : CLICompiler<K2NativeCompilerArguments>() {
                 parseShortModuleName(arguments, configuration, outputKind)?.let {
                     put(SHORT_MODULE_NAME, it)
                 }
+
+                put(SSA, arguments.ssa)
             }
         }
     }
