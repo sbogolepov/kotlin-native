@@ -101,22 +101,22 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     val currentDef = mutableMapOf<IrVariable, MutableMap<SSABlock, SSAValue>>()
     val incompletePhis = mutableMapOf<SSABlock, MutableMap<IrVariable, SSAValue>>()
 
-    fun writeVariable(block: SSABlock, variable: IrVariable, value: SSAValue) {
+    private fun writeVariable(block: SSABlock, variable: IrVariable, value: SSAValue) {
         val blocks = currentDef.getOrPut(variable) { mutableMapOf() }
         blocks[block] = value
     }
 
-    fun readVariable(block: SSABlock, variable: IrVariable): SSAValue =
+    private fun readVariable(block: SSABlock, variable: IrVariable): SSAValue =
         if (block in currentDef.getOrPut(variable) { mutableMapOf() }) {
             currentDef[variable]!![block]!!
         } else {
             readRecursiveVariable(block, variable)
         }
 
-    fun readRecursiveVariable(block: SSABlock, variable: IrVariable): SSAValue {
+    private fun readRecursiveVariable(block: SSABlock, variable: IrVariable): SSAValue {
         val value: SSAValue = when {
             !block.sealed -> {
-                val phi = SSAPhi(block)
+                val phi = SSAPhi(block).add()
                 incompletePhis.getOrPut(block) { mutableMapOf()}[variable] = phi
                 phi
             }
@@ -125,7 +125,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             }
             // Break potential cycles with operandless phi val
             else -> {
-                val phi = SSAPhi(block)
+                val phi = SSAPhi(block).add()
                 writeVariable(block, variable, phi)
                 addPhiOperands(variable, phi)
             }
@@ -210,8 +210,15 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         is IrReturn -> generateReturn(irExpr)
         is IrGetObjectValue -> generateGetObjectValue(irExpr)
         is IrWhileLoop -> generateWhileLoop(irExpr)
+        is IrSetVariable -> generateSetVariable(irExpr)
         is IrContainerExpression -> generateContainerExpression(irExpr)
         else -> TODO()
+    }
+
+    private fun generateSetVariable(setVariable: IrSetVariable): SSAValue {
+        val value = generateExpression(setVariable.value)
+        writeVariable(curBlock, setVariable.symbol.owner, value)
+        return SSAConstant.Undef // TODO: Unit
     }
 
     private fun generateContainerExpression(containerExpr: IrContainerExpression): SSAValue {
@@ -239,11 +246,13 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         SSACondBr(condition, loopBody, loopExit).add()
 
         curBlock = loopBody
+        seal(loopBody)
         irLoop.body?.let { generateStatement(it) }
         SSABr(loopHeader).add()
+        seal(loopHeader)
 
         curBlock = loopExit
-
+        seal(loopExit)
         return SSAConstant.Undef // TODO: replace with unit
     }
 
@@ -277,7 +286,19 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         }
     }
 
+    private fun SSABlock.edgeTo(target: SSABlock) {
+        this.succs += target
+        target.preds += this
+    }
+
     fun <T: SSAInstruction> T.add(): T {
+        when (this) {
+            is SSABr -> curBlock.edgeTo(target)
+            is SSACondBr -> {
+                curBlock.edgeTo(truTarget)
+                curBlock.edgeTo(flsTarget)
+            }
+        }
         curBlock.body += this
         return this
     }

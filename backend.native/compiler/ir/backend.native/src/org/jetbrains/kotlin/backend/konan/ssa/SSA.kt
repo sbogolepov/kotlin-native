@@ -128,7 +128,7 @@ class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
 
     val args = mutableListOf<SSABlockArg>()
     val body: MutableList<SSAInstruction> = mutableListOf()
-    val succs: MutableList<SSABlock> = mutableListOf()
-    val preds: MutableList<SSABlock> = mutableListOf()
+    val succs = mutableSetOf<SSABlock>()
+    val preds = mutableSetOf<SSABlock>()
     var sealed: Boolean = false
 }
