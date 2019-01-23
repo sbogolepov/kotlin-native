@@ -118,7 +118,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             val value: SSAValue = when {
                 !block.sealed -> {
                     val phi = SSAPhi(block).add()
-                    incompletePhis.getOrPut(block) { mutableMapOf()}[variable] = phi
+                    incompletePhis.getOrPut(block) { mutableMapOf() }[variable] = phi
                     phi
                 }
                 block.preds.size == 1 -> {
@@ -247,10 +247,10 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
                 seal(curBlock)
                 generateExpression(branch.result)
             } else {
+                seal(curBlock)
                 val cond = generateExpression(branch.condition)
                 val bodyBlock = addBlock("when_body")
                 SSACondBr(cond, bodyBlock, nextBlock).add()
-                seal(curBlock)
                 curBlock = bodyBlock
                 seal(curBlock)
                 generateExpression(branch.result)
@@ -273,6 +273,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
                 generateWhenCase(it, it == irWhen.branches.last())
             }
             exitBlock.add()
+            exitBlock.sealed = true
             return if (isExpression) {
                 phi
             } else {
