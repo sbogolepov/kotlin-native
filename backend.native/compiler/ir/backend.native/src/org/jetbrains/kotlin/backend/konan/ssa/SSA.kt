@@ -112,14 +112,28 @@ class SSAFunction(
         val name: String,
         val type: SSAFuncType
 ): SSACallable {
-    val entry = SSABlock(this, SSABlockId(0))
+    val entry = SSABlock(this, SSABlockId.Entry)
     val blocks = mutableListOf(entry)
 }
 
-class SSABlockId(private val id: Int, val name:String = "") {
-    override fun toString(): String {
-        return "${id}_$name"
+sealed class SSABlockId {
+    object Entry : SSABlockId() {
+        override fun toString(): String =
+                "entry"
     }
+
+    class Simple(private val id: Int, val name: String = "") : SSABlockId() {
+        override fun toString(): String =
+            if (name.isEmpty()) {
+                "$id"
+            } else {
+                "${id}_$name"
+            }
+    }
+}
+
+class SSAEdge(val from: SSABlock, val to: SSABlock, val value: SSAValue): SSAValue {
+    override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
 
 class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
@@ -131,4 +145,9 @@ class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
     val succs = mutableSetOf<SSABlock>()
     val preds = mutableSetOf<SSABlock>()
     var sealed: Boolean = false
+}
+
+fun SSAInstruction.isTerminal() = when(this) {
+    is SSAReturn, is SSABr, is SSACondBr -> true
+    else -> false
 }

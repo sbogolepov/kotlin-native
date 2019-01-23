@@ -45,6 +45,7 @@ class SSARender() {
     private fun renderOperand(value: SSAValue): String = when {
         value is SSAConstant -> renderConstant(value)
         value is SSABlock -> "${value.id}"
+        value is SSAEdge -> "{${value.from.id}: ${renderOperand(value.value)}}"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}"
         else -> "UNNAMED"
     }
