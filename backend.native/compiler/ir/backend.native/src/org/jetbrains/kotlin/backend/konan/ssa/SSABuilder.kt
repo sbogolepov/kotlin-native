@@ -99,10 +99,10 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     // SSA construction-related
     private val construct = object {
-        val currentDef = mutableMapOf<IrVariable, MutableMap<SSABlock, SSAValue>>()
-        val incompletePhis = mutableMapOf<SSABlock, MutableMap<IrVariable, SSAValue>>()
+        val currentDef = mutableMapOf<IrValueDeclaration, MutableMap<SSABlock, SSAValue>>()
+        val incompletePhis = mutableMapOf<SSABlock, MutableMap<IrValueDeclaration, SSAValue>>()
 
-        fun writeVariable(block: SSABlock, variable: IrVariable, value: SSAValue) {
+        fun writeVariable(block: SSABlock, variable: IrValueDeclaration, value: SSAValue) {
             val blocks = currentDef.getOrPut(variable) { mutableMapOf() }
             blocks[block] = value
         }
@@ -117,7 +117,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         private fun readRecursiveVariable(block: SSABlock, variable: IrVariable): SSAValue {
             val value: SSAValue = when {
                 !block.sealed -> {
-                    val phi = SSAPhi(block).add()
+                    val phi = +SSAPhi(block)
                     incompletePhis.getOrPut(block) { mutableMapOf() }[variable] = phi
                     phi
                 }
@@ -126,7 +126,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
                 }
                 // Break potential cycles with operandless phi val
                 else -> {
-                    val phi = SSAPhi(block).add()
+                    val phi = +SSAPhi(block)
                     writeVariable(block, variable, phi)
                     addPhiOperands(variable, phi)
                 }
@@ -172,6 +172,11 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     }
 
     fun build(): SSAFunction {
+        irFunction.valueParameters.forEach {
+            val param = SSAFuncArgument(it.name.asString())
+            func.params.add(param)
+            construct.writeVariable(func.entry, it, param)
+        }
         seal(func.entry)
         irFunction.body?.let { generateBody(it) }
         return func
@@ -243,21 +248,20 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         //  if-expression
         private fun generateWhenCase(branch: IrBranch, isLast: Boolean) {
             val nextBlock = if (isLast) exitBlock else SSABlock(func, blockIdGen.next("when_cond"))
+            seal(curBlock)
             val result = if (isUnconditional(branch)) {
-                seal(curBlock)
                 generateExpression(branch.result)
             } else {
-                seal(curBlock)
                 val cond = generateExpression(branch.condition)
                 val bodyBlock = addBlock("when_body")
-                SSACondBr(cond, bodyBlock, nextBlock).add()
+                +SSACondBr(cond, bodyBlock, nextBlock)
                 curBlock = bodyBlock
                 seal(curBlock)
                 generateExpression(branch.result)
             }
 
             if (curBlock.body.isEmpty() || !curBlock.body.last().isTerminal()) {
-                SSABr(exitBlock).add()
+                +SSABr(exitBlock)
                 if (isExpression) {
                     phi.appendOperand(SSAEdge(curBlock, exitBlock, result))
                 }
@@ -303,35 +307,35 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     }
 
     private fun generateWhileLoop(irLoop: IrWhileLoop): SSAValue {
-
         val loopHeader = addBlock("loop_header")
         val loopBody = addBlock("loop_body")
         val loopExit = addBlock("loop_exit")
 
-        SSABr(loopHeader).add()
+        +SSABr(loopHeader)
 
         curBlock = loopHeader
         val condition = generateExpression(irLoop.condition)
-        SSACondBr(condition, loopBody, loopExit).add()
+        +SSACondBr(condition, loopBody, loopExit)
 
         curBlock = loopBody
         seal(loopBody)
         irLoop.body?.let { generateStatement(it) }
-        SSABr(loopHeader).add()
+        +SSABr(loopHeader)
         seal(loopHeader)
 
         curBlock = loopExit
         seal(loopExit)
-        return SSAConstant.Undef // TODO: Unit
+
+        return getUnit()
     }
 
     private fun generateGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
-        return SSAGetObjectValue().add()
+        return +SSAGetObjectValue()
     }
 
     private fun generateReturn(irReturn: IrReturn): SSAValue {
         val retVal = generateExpression(irReturn.value)
-        return SSAReturn(retVal).add()
+        return +SSAReturn(retVal)
     }
 
     private fun generateConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
@@ -360,7 +364,9 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         target.preds += this
     }
 
-    fun <T: SSAInstruction> T.add(): T {
+    private operator fun <T: SSAInstruction> T.unaryPlus(): T = this.add()
+
+    private fun <T: SSAInstruction> T.add(): T {
         when (this) {
             is SSABr -> curBlock.edgeTo(target)
             is SSACondBr -> {
@@ -379,12 +385,11 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     private fun generateCall(irCall: IrCall): SSAValue {
         val callee = declMapper.mapFunction(irCall.symbol.owner)
-        return SSACall(callee).apply {
+        return +SSACall(callee).apply {
             for ((paramDesc, paramExpr) in irCall.getArguments()) {
                 val value = generateExpression(paramExpr)
                 appendOperand(value)
             }
-            add()
         }
     }
 }

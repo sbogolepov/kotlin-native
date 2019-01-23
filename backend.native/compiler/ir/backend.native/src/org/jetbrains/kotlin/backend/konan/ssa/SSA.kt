@@ -35,6 +35,10 @@ interface SSAValue {
     val users: MutableSet<SSAInstruction>
 }
 
+class SSAFuncArgument(val name: String) : SSAValue {
+    override val users: MutableSet<SSAInstruction> = mutableSetOf()
+}
+
 interface SSAUser {
 
 }
@@ -114,6 +118,7 @@ class SSAFunction(
 ): SSACallable {
     val entry = SSABlock(this, SSABlockId.Entry)
     val blocks = mutableListOf(entry)
+    val params = mutableListOf<SSAFuncArgument>()
 }
 
 sealed class SSABlockId {

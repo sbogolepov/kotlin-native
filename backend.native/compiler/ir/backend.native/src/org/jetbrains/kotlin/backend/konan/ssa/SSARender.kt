@@ -9,7 +9,7 @@ class SSARender() {
     val slotTracker = SSASlotTracker()
 
     fun render(func: SSAFunction): String = buildString {
-            appendln(func.name)
+            appendln("${func.name}(${func.params.joinToString { it.name }})")
             for (block in func.blocks) {
                 for (insn in block.body) {
                     slotTracker.track(insn)
