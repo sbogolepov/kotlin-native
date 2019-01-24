@@ -1,5 +1,8 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrType
+
 private const val padDelta = " "
 
 class SSARender() {
@@ -9,7 +12,7 @@ class SSARender() {
     val slotTracker = SSASlotTracker()
 
     fun render(func: SSAFunction): String = buildString {
-            appendln("${func.name}(${func.params.joinToString { it.name }})")
+            appendln("${func.name}(${func.params.joinToString { it.name }}): ${renderType(func.type)}")
             for (block in func.blocks) {
                 for (insn in block.body) {
                     slotTracker.track(insn)
@@ -32,7 +35,7 @@ class SSARender() {
         val track = slotTracker.slot(insn)
 
         when (insn) {
-            is SSACall -> append("$pad %$track = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
+            is SSACall -> append("$pad %$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
             is SSAGetObjectValue -> append("$pad %$track = GET OBJECT VALUE")
             is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
             is SSABr -> append("$pad br ${renderOperand(insn.target)}")
@@ -43,12 +46,26 @@ class SSARender() {
     }
 
     private fun renderOperand(value: SSAValue): String = when {
-        value is SSAConstant -> renderConstant(value)
+        value is SSAConstant -> "${renderConstant(value)}: ${renderType(value.type)}"
         value is SSABlock -> "${value.id}"
         value is SSAEdge -> "{${value.from.id}: ${renderOperand(value.value)}}"
-        slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}"
+        slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}: ${renderType(value.type)}"
         else -> "UNNAMED"
     }
+
+    private fun renderType(type: SSAType): String = when (type) {
+        is SSAPrimitiveType -> type.name.toLowerCase()
+        is SSAWrapperType -> "wrap(${renderIrType(type.irType)})"
+        is SSAFuncType -> "(${type.parameterTypes.joinToString { renderType(it) }}) -> ${renderType(type.returnType)}"
+        else -> "type_unk"
+    }
+
+    private fun renderIrType(irType: IrType): String =
+            if (irType is IrSimpleType) {
+                irType.classifier.descriptor.name.asString()
+            } else {
+                irType.toString()
+            }
 
     private fun renderConstant(const: SSAConstant): String = when (const) {
         SSAConstant.Undef       -> "undef"

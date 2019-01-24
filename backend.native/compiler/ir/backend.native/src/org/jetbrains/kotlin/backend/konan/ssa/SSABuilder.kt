@@ -173,7 +173,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     fun build(): SSAFunction {
         irFunction.valueParameters.forEach {
-            val param = SSAFuncArgument(it.name.asString())
+            val param = SSAFuncArgument(it.name.asString(), typeMapper.map(it.type))
             func.params.add(param)
             construct.writeVariable(func.entry, it, param)
         }
@@ -330,7 +330,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     }
 
     private fun generateGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
-        return +SSAGetObjectValue()
+        return +SSAGetObjectValue(typeMapper.map(irExpr.type))
     }
 
     private fun generateReturn(irReturn: IrReturn): SSAValue {

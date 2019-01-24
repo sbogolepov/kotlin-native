@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.llvm.voidType
 import org.jetbrains.kotlin.ir.types.IrType
 
 class SSAModule {
@@ -9,62 +10,37 @@ class SSAModule {
 
 interface SSACallable
 
-interface SSAType {
-
-}
-
-class SSAWrapperType(val irType: IrType): SSAType
-
-enum class SSAPrimitiveType: SSAType {
-    BOOL,
-    BYTE,
-    CHAR,
-    SHORT,
-    INT,
-    LONG,
-    FLOAT,
-    DOUBLE
-}
-
-class SSAFuncType(
-        val returnType: SSAType,
-        val parameterTypes: List<SSAType>
-)
-
 interface SSAValue {
     val users: MutableSet<SSAInstruction>
+    val type: SSAType
 }
 
-class SSAFuncArgument(val name: String) : SSAValue {
+class SSAFuncArgument(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
 
-interface SSAUser {
-
-}
-
-class SSABlockArg : SSAValue, SSAUser {
+class SSABlockArg(override val type: SSAType) : SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
 }
 
-class SSAGetObjectValue() : SSAInstructionBase()
+class SSAGetObjectValue(override val type: SSAType) : SSAInstructionBase()
 
-sealed class SSAConstant : SSAValue {
+sealed class SSAConstant(override val type: SSAType) : SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
 
-    object Undef : SSAConstant()
+    object Undef : SSAConstant(SpecialType)
 
-    object Null : SSAConstant()
-    class Bool(val value: kotlin.Boolean): SSAConstant()
-    class Byte(val value: kotlin.Byte) : SSAConstant()
-    class Char(val value: kotlin.Char) : SSAConstant()
-    class Short(val value: kotlin.Short): SSAConstant()
-    class Int(val value: kotlin.Int) : SSAConstant()
-    class Long(val value: kotlin.Long) : SSAConstant()
-    class Float(val value: kotlin.Float) : SSAConstant()
-    class Double(val value: kotlin.Double) : SSAConstant()
-    class String(val value: kotlin.String): SSAConstant()
+    object Null : SSAConstant(ReferenceType())
+    class Bool(val value: kotlin.Boolean): SSAConstant(SSAPrimitiveType.BOOL)
+    class Byte(val value: kotlin.Byte) : SSAConstant(SSAPrimitiveType.BYTE)
+    class Char(val value: kotlin.Char) : SSAConstant(SSAPrimitiveType.CHAR)
+    class Short(val value: kotlin.Short): SSAConstant(SSAPrimitiveType.SHORT)
+    class Int(val value: kotlin.Int) : SSAConstant(SSAPrimitiveType.INT)
+    class Long(val value: kotlin.Long) : SSAConstant(SSAPrimitiveType.LONG)
+    class Float(val value: kotlin.Float) : SSAConstant(SSAPrimitiveType.FLOAT)
+    class Double(val value: kotlin.Double) : SSAConstant(SSAPrimitiveType.DOUBLE)
+    class String(val value: kotlin.String): SSAConstant(ReferenceType())
 }
 
 
@@ -98,19 +74,25 @@ abstract class SSAInstructionBase(
 }
 
 class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
-
+    override val type: SSAType = callee.type.returnType
 }
 
 class SSAPhi(val block: SSABlock): SSAInstructionBase() {
-
+    override val type: SSAType = SpecialType
 }
 
-class SSABr(val target: SSABlock) : SSAInstructionBase(mutableListOf(target))
+class SSABr(val target: SSABlock) : SSAInstructionBase(mutableListOf(target)) {
+    override val type: SSAType = VoidType
+}
 
 class SSACondBr(val condition: SSAValue, val truTarget: SSABlock, val flsTarget: SSABlock)
-    : SSAInstructionBase(mutableListOf(condition, truTarget, flsTarget))
+    : SSAInstructionBase(mutableListOf(condition, truTarget, flsTarget)) {
+    override val type: SSAType = VoidType
+}
 
-class SSAReturn(val retVal: SSAValue): SSAInstructionBase(mutableListOf(retVal))
+class SSAReturn(val retVal: SSAValue): SSAInstructionBase(mutableListOf(retVal)) {
+    override val type: SSAType = VoidType
+}
 
 class SSAFunction(
         val name: String,
@@ -129,21 +111,21 @@ sealed class SSABlockId {
 
     class Simple(private val id: Int, val name: String = "") : SSABlockId() {
         override fun toString(): String =
-            if (name.isEmpty()) {
-                "$id"
-            } else {
-                "${id}_$name"
-            }
+            if (name.isEmpty()) "$id" else "${id}_$name"
     }
 }
 
 class SSAEdge(val from: SSABlock, val to: SSABlock, val value: SSAValue): SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
+
+    override val type: SSAType = SpecialType
 }
 
 class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
+
+    override val type: SSAType = SSABlockType()
 
     val args = mutableListOf<SSABlockArg>()
     val body: MutableList<SSAInstruction> = mutableListOf()
