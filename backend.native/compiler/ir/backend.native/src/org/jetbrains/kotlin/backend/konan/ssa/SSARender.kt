@@ -14,6 +14,9 @@ class SSARender() {
     fun render(func: SSAFunction): String = buildString {
             appendln("${func.name}(${func.params.joinToString { it.name }}): ${renderType(func.type)}")
             for (block in func.blocks) {
+                for (param in block.params) {
+                    slotTracker.track(param)
+                }
                 for (insn in block.body) {
                     slotTracker.track(insn)
                 }
@@ -22,7 +25,7 @@ class SSARender() {
         }
 
     private fun render(block: SSABlock): String = buildString {
-        appendln("block ${block.id}")
+        appendln("block ${block.id}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }})")
         pad = padDelta
         for (insn in block.body) {
             appendln(render(insn))
@@ -38,9 +41,9 @@ class SSARender() {
             is SSACall -> append("$pad %$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
             is SSAGetObjectValue -> append("$pad %$track = GET OBJECT VALUE")
             is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
-            is SSABr -> append("$pad br ${renderOperand(insn.target)}")
+            is SSABr -> append("$pad br ${renderOperand(insn.edge)}")
             is SSAPhi -> append("$pad %$track = phi ${insn.operands.joinToString { renderOperand(it) }}")
-            is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truTarget)} ${renderOperand(insn.flsTarget)}")
+            is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}")
             else -> append("$pad UNSUPPORTED")
         }
     }
@@ -48,7 +51,7 @@ class SSARender() {
     private fun renderOperand(value: SSAValue): String = when {
         value is SSAConstant -> "${renderConstant(value)}: ${renderType(value.type)}"
         value is SSABlock -> "${value.id}"
-        value is SSAEdge -> "{${value.from.id}: ${renderOperand(value.value)}}"
+        value is SSAEdge -> "${value.to.id}(${value.args.joinToString { renderOperand(it) }})"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}: ${renderType(value.type)}"
         else -> "UNNAMED"
     }

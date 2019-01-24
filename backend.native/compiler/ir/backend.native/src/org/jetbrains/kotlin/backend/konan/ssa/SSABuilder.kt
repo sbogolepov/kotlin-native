@@ -97,6 +97,9 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     var curBlock = func.entry
 
+    private fun SSABlock.addParam(type: SSAType): SSABlockParam =
+            SSABlockParam(type, this).also { this.params.add(it) }
+
     // SSA construction-related
     private val construct = object {
         val currentDef = mutableMapOf<IrValueDeclaration, MutableMap<SSABlock, SSAValue>>()
@@ -117,54 +120,53 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         private fun readRecursiveVariable(block: SSABlock, variable: IrVariable): SSAValue {
             val value: SSAValue = when {
                 !block.sealed -> {
-                    val phi = +SSAPhi(block)
-                    incompletePhis.getOrPut(block) { mutableMapOf() }[variable] = phi
-                    phi
+                    val param = block.addParam(typeMapper.map(variable.type))
+                    incompletePhis.getOrPut(block) { mutableMapOf() }[variable] = param
+                    param
                 }
                 block.preds.size == 1 -> {
-                    readVariable(block.preds.first(), variable)
+                    readVariable(block.preds.first().from, variable)
                 }
                 // Break potential cycles with operandless phi val
                 else -> {
-                    val phi = +SSAPhi(block)
-                    writeVariable(block, variable, phi)
-                    addPhiOperands(variable, phi)
+                    val param = block.addParam(typeMapper.map(variable.type))
+                    writeVariable(block, variable, param)
+                    addParamValues(variable, param)
                 }
             }
             writeVariable(block, variable, value)
             return value
         }
 
-        private fun addPhiOperands(variable: IrVariable, phi: SSAPhi): SSAValue {
-            for (pred in phi.block.preds) {
-                val edge = SSAEdge(pred, curBlock, readVariable(pred, variable))
-                phi.appendOperand(edge)
+        private fun addParamValues(variable: IrVariable, param: SSABlockParam): SSAValue {
+            for (edge in param.owner.preds) {
+                edge.args.add(readVariable(edge.from, variable))
             }
-            return tryRemoveTrivialPhi(phi)
+            return param //tryRemoveTrivialPhi(phi)
         }
 
         // TODO: is it valid to always replace phi with previous phi?
-        private fun tryRemoveTrivialPhi(phi: SSAPhi): SSAValue {
-            var same: SSAValue? = null
-
-            for (op in phi.operands) {
-                if (op === same || op === phi) {
-                    continue // unique value or self reference
-                }
-                if (same != null) {
-                    return phi // phi merges at least 2 values -> not trivial
-                }
-                same = op
-            }
-            if (same == null) {
-                same = SSAConstant.Undef // phi is unreachable or in the entry block
-            }
-            phi.users.remove(phi)
-            val users = phi.users
-            phi.replaceBy(same)
-            users.filterIsInstance<SSAPhi>().forEach { tryRemoveTrivialPhi(it) }
-            return same
-        }
+//        private fun tryRemoveTrivialPhi(phi: SSAPhi): SSAValue {
+//            var same: SSAValue? = null
+//
+//            for (op in phi.operands) {
+//                if (op === same || op === phi) {
+//                    continue // unique value or self reference
+//                }
+//                if (same != null) {
+//                    return phi // phi merges at least 2 values -> not trivial
+//                }
+//                same = op
+//            }
+//            if (same == null) {
+//                same = SSAConstant.Undef // phi is unreachable or in the entry block
+//            }
+//            phi.users.remove(phi)
+//            val users = phi.users
+//            phi.replaceBy(same)
+//            users.filterIsInstance<SSAPhi>().forEach { tryRemoveTrivialPhi(it) }
+//            return same
+//        }
     }
 
     private fun addBlock(name: String = ""): SSABlock {
@@ -232,10 +234,8 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
         private val exitBlock = SSABlock(func, blockIdGen.next("when_exit"))
 
-        private val phi: SSAPhi by lazy {
-            SSAPhi(exitBlock).also {
-                exitBlock.body += it
-            }
+        private val param: SSABlockParam by lazy {
+            exitBlock.addParam(typeMapper.map(irWhen.type))
         }
 
         private val isExpression = isUnconditional(irWhen.branches.last()) && !irWhen.type.isUnit()
@@ -254,16 +254,16 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             } else {
                 val cond = generateExpression(branch.condition)
                 val bodyBlock = addBlock("when_body")
-                +SSACondBr(cond, bodyBlock, nextBlock)
+                addCondBr(cond, bodyBlock, nextBlock)
                 curBlock = bodyBlock
                 seal(curBlock)
                 generateExpression(branch.result)
             }
 
             if (curBlock.body.isEmpty() || !curBlock.body.last().isTerminal()) {
-                +SSABr(exitBlock)
+                val br = addBr(exitBlock)
                 if (isExpression) {
-                    phi.appendOperand(SSAEdge(curBlock, exitBlock, result))
+                    br.edge.args.add(result)
                 }
             }
             if (nextBlock != exitBlock) {
@@ -279,7 +279,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             exitBlock.add()
             exitBlock.sealed = true
             return if (isExpression) {
-                phi
+                param
             } else {
                 getUnit()
             }
@@ -311,22 +311,40 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         val loopBody = addBlock("loop_body")
         val loopExit = addBlock("loop_exit")
 
-        +SSABr(loopHeader)
+        addBr(loopHeader)
 
         curBlock = loopHeader
         val condition = generateExpression(irLoop.condition)
-        +SSACondBr(condition, loopBody, loopExit)
+        addCondBr(condition, loopBody, loopExit)
 
         curBlock = loopBody
         seal(loopBody)
         irLoop.body?.let { generateStatement(it) }
-        +SSABr(loopHeader)
+        addBr(loopHeader)
         seal(loopHeader)
 
         curBlock = loopExit
         seal(loopExit)
 
         return getUnit()
+    }
+
+    fun addBr(to: SSABlock): SSABr =
+        SSABr(createEdgeTo(to)).also {
+            curBlock.body.add(it)
+        }
+
+    fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
+        val truEdge = createEdgeTo(tru)
+        val flsEdge = createEdgeTo(fls)
+        curBlock.body.add(SSACondBr(cond, truEdge, flsEdge))
+    }
+
+    private fun createEdgeTo(to: SSABlock): SSAEdge {
+        val edge = SSAEdge(curBlock, to)
+        curBlock.succs.add(edge)
+        to.preds.add(edge)
+        return edge
     }
 
     private fun generateGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
@@ -359,21 +377,21 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         }
     }
 
-    private fun SSABlock.edgeTo(target: SSABlock) {
-        this.succs += target
-        target.preds += this
-    }
+//    private fun SSABlock.edgeTo(target: SSABlock) {
+//        this.succs += target
+//        target.preds += this
+//    }
 
     private operator fun <T: SSAInstruction> T.unaryPlus(): T = this.add()
 
     private fun <T: SSAInstruction> T.add(): T {
-        when (this) {
-            is SSABr -> curBlock.edgeTo(target)
-            is SSACondBr -> {
-                curBlock.edgeTo(truTarget)
-                curBlock.edgeTo(flsTarget)
-            }
-        }
+//        when (this) {
+//            is SSABr -> curBlock.edgeTo(target)
+//            is SSACondBr -> {
+//                curBlock.edgeTo(truTarget)
+//                curBlock.edgeTo(flsTarget)
+//            }
+//        }
         curBlock.body += this
         return this
     }

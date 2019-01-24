@@ -1,8 +1,5 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.llvm.voidType
-import org.jetbrains.kotlin.ir.types.IrType
-
 class SSAModule {
     val functions = mutableListOf<SSAFunction>()
     val imports = mutableListOf<SSAFunction>()
@@ -19,7 +16,7 @@ class SSAFuncArgument(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
 
-class SSABlockArg(override val type: SSAType) : SSAValue {
+class SSABlockParam(override val type: SSAType, val owner: SSABlock) : SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
 }
 
@@ -81,12 +78,12 @@ class SSAPhi(val block: SSABlock): SSAInstructionBase() {
     override val type: SSAType = SpecialType
 }
 
-class SSABr(val target: SSABlock) : SSAInstructionBase(mutableListOf(target)) {
+class SSABr(val edge: SSAEdge) : SSAInstructionBase(mutableListOf(edge)) {
     override val type: SSAType = VoidType
 }
 
-class SSACondBr(val condition: SSAValue, val truTarget: SSABlock, val flsTarget: SSABlock)
-    : SSAInstructionBase(mutableListOf(condition, truTarget, flsTarget)) {
+class SSACondBr(val condition: SSAValue, val truEdge: SSAEdge, val flsEdge: SSAEdge)
+    : SSAInstructionBase(mutableListOf(condition, truEdge, flsEdge)) {
     override val type: SSAType = VoidType
 }
 
@@ -115,7 +112,11 @@ sealed class SSABlockId {
     }
 }
 
-class SSAEdge(val from: SSABlock, val to: SSABlock, val value: SSAValue): SSAValue {
+class SSAEdge(
+        val from: SSABlock,
+        val to: SSABlock,
+        val args: MutableList<SSAValue> = mutableListOf()
+): SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 
     override val type: SSAType = SpecialType
@@ -127,10 +128,10 @@ class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
 
     override val type: SSAType = SSABlockType()
 
-    val args = mutableListOf<SSABlockArg>()
+    val params = mutableListOf<SSABlockParam>()
     val body: MutableList<SSAInstruction> = mutableListOf()
-    val succs = mutableSetOf<SSABlock>()
-    val preds = mutableSetOf<SSABlock>()
+    val succs = mutableSetOf<SSAEdge>()
+    val preds = mutableSetOf<SSAEdge>()
     var sealed: Boolean = false
 }
 
