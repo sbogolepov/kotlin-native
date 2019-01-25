@@ -74,10 +74,6 @@ class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
     override val type: SSAType = callee.type.returnType
 }
 
-class SSAPhi(val block: SSABlock): SSAInstructionBase() {
-    override val type: SSAType = SpecialType
-}
-
 class SSABr(val edge: SSAEdge) : SSAInstructionBase(mutableListOf(edge)) {
     override val type: SSAType = VoidType
 }

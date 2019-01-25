@@ -377,21 +377,9 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         }
     }
 
-//    private fun SSABlock.edgeTo(target: SSABlock) {
-//        this.succs += target
-//        target.preds += this
-//    }
-
     private operator fun <T: SSAInstruction> T.unaryPlus(): T = this.add()
 
     private fun <T: SSAInstruction> T.add(): T {
-//        when (this) {
-//            is SSABr -> curBlock.edgeTo(target)
-//            is SSACondBr -> {
-//                curBlock.edgeTo(truTarget)
-//                curBlock.edgeTo(flsTarget)
-//            }
-//        }
         curBlock.body += this
         return this
     }

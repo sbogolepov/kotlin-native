@@ -42,7 +42,6 @@ class SSARender() {
             is SSAGetObjectValue -> append("$pad %$track = GET OBJECT VALUE")
             is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
             is SSABr -> append("$pad br ${renderOperand(insn.edge)}")
-            is SSAPhi -> append("$pad %$track = phi ${insn.operands.joinToString { renderOperand(it) }}")
             is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}")
             else -> append("$pad UNSUPPORTED")
         }

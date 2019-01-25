@@ -16,11 +16,6 @@ private fun validateFunction(fn: SSAFunction) {
             println("block ${it.id} is not ending with terminal instruction")
         }
         for (insn in it.body) {
-            if (insn is SSAPhi) {
-                if (insn.operands.isEmpty()) {
-                    println("block ${it.id} has operandless phi")
-                }
-            }
         }
     }
     println()
