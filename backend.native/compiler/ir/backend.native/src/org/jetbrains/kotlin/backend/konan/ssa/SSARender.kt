@@ -15,7 +15,7 @@ class SSARender() {
             func.params.forEach {
                 slotTracker.track(it)
             }
-            appendln("${func.name}(${func.params.joinToString { it.name }}): ${renderType(func.type)}")
+            appendln("${func.name}(${func.params.joinToString { renderOperand(it) }}): ${renderType(func.type)}")
             for (block in func.blocks) {
                 for (param in block.params) {
                     slotTracker.track(param)

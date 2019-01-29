@@ -401,6 +401,14 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         }
 
         val callee = declMapper.mapFunction(irCall.symbol.owner)
+
+        if (irCall.dispatchReceiver != null) {
+            val receiver = args[0]
+            return +SSAMethodCall(receiver, callee).apply {
+                args.drop(1).forEach { appendOperand(it) }
+            }
+        }
+
         return +SSACall(callee).apply {
             args.forEach { appendOperand(it) }
         }
