@@ -12,6 +12,9 @@ class SSARender() {
     val slotTracker = SSASlotTracker()
 
     fun render(func: SSAFunction): String = buildString {
+            func.params.forEach {
+                slotTracker.track(it)
+            }
             appendln("${func.name}(${func.params.joinToString { it.name }}): ${renderType(func.type)}")
             for (block in func.blocks) {
                 for (param in block.params) {
@@ -39,6 +42,8 @@ class SSARender() {
 
         when (insn) {
             is SSACall -> append("$pad %$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
+            is SSAMethodCall -> append("$pad %$track: ${renderType(insn.type)} = call (${renderOperand(insn.operands[0])}).${insn.callee.name} ${insn.operands.drop(1).joinToString { renderOperand(it) }}")
+            is SSAAlloc -> append("$pad %$track: ${renderType(insn.type)} = allocate")
             is SSAGetObjectValue -> append("$pad %$track = GET OBJECT VALUE")
             is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
             is SSABr -> append("$pad br ${renderOperand(insn.edge)}")

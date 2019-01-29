@@ -1,10 +1,12 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArguments
 import org.jetbrains.kotlin.name.FqName
@@ -110,14 +112,14 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             blocks[block] = value
         }
 
-        fun readVariable(block: SSABlock, variable: IrVariable): SSAValue =
+        fun readVariable(block: SSABlock, variable: IrValueDeclaration): SSAValue =
                 if (block in currentDef.getOrPut(variable) { mutableMapOf() }) {
                     currentDef[variable]!![block]!!
                 } else {
                     readRecursiveVariable(block, variable)
                 }
 
-        private fun readRecursiveVariable(block: SSABlock, variable: IrVariable): SSAValue {
+        private fun readRecursiveVariable(block: SSABlock, variable: IrValueDeclaration): SSAValue {
             val value: SSAValue = when {
                 !block.sealed -> {
                     val param = block.addParam(typeMapper.map(variable.type))
@@ -138,7 +140,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             return value
         }
 
-        private fun addParamValues(variable: IrVariable, param: SSABlockParam): SSAValue {
+        private fun addParamValues(variable: IrValueDeclaration, param: SSABlockParam): SSAValue {
             for (edge in param.owner.preds) {
                 edge.args.add(readVariable(edge.from, variable))
             }
@@ -371,7 +373,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     private fun generateGetValue(irGetValue: IrGetValue): SSAValue {
         if (irGetValue.symbol.owner in construct.currentDef) {
-            return construct.readVariable(curBlock, irGetValue.symbol.owner as IrVariable)
+            return construct.readVariable(curBlock, irGetValue.symbol.owner)
         } else {
             TODO("Unsupported operation")
         }
@@ -390,12 +392,36 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     }
 
     private fun generateCall(irCall: IrCall): SSAValue {
+
+        val function = irCall.symbol.owner
+        if (function is IrConstructor) return generateConstructorCall(irCall)
+
+        val args = (irCall.getArguments()).map { (_, paramExpr) ->
+            generateExpression(paramExpr)
+        }
+
         val callee = declMapper.mapFunction(irCall.symbol.owner)
         return +SSACall(callee).apply {
-            for ((paramDesc, paramExpr) in irCall.getArguments()) {
-                val value = generateExpression(paramExpr)
-                appendOperand(value)
-            }
+            args.forEach { appendOperand(it) }
         }
+    }
+
+    private fun generateConstructorCall(irCall: IrCall): SSAValue {
+        val constructor = irCall.symbol.owner as IrConstructor
+        val irClass = (irCall.symbol as IrConstructorSymbol).owner.constructedClass
+
+        val ssaClass = SSAClass(irClass)
+        val allocationSite = +SSAAlloc(ssaClass)
+
+        val args = (irCall.getArguments()).map { (_, paramExpr) ->
+            generateExpression(paramExpr)
+        }
+
+        val callee = declMapper.mapFunction(constructor)
+        +SSAMethodCall(allocationSite, callee).apply {
+            args.forEach { appendOperand(it) }
+        }
+
+        return allocationSite
     }
 }

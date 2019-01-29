@@ -32,19 +32,19 @@ internal class SSAFuncToBitcode(val func: SSAFunction) {
     }
 
     private fun generateCondBr(insn: SSACondBr): LLVMValueRef {
-
+        TODO()
     }
 
     private fun generateBr(insn: SSABr): LLVMValueRef {
-
+        TODO()
     }
 
     private fun generateReturn(insn: SSAReturn): LLVMValueRef {
-
+        TODO()
     }
 
     private fun generateCall(insn: SSACall): LLVMValueRef {
-
+        TODO()
     }
 }
 

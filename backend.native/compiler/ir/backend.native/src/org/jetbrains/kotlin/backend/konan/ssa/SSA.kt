@@ -28,7 +28,7 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
 
     object Undef : SSAConstant(SpecialType)
 
-    object Null : SSAConstant(ReferenceType())
+    object Null : SSAConstant(NullRefType)
     class Bool(val value: kotlin.Boolean): SSAConstant(SSAPrimitiveType.BOOL)
     class Byte(val value: kotlin.Byte) : SSAConstant(SSAPrimitiveType.BYTE)
     class Char(val value: kotlin.Char) : SSAConstant(SSAPrimitiveType.CHAR)
@@ -37,54 +37,7 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     class Long(val value: kotlin.Long) : SSAConstant(SSAPrimitiveType.LONG)
     class Float(val value: kotlin.Float) : SSAConstant(SSAPrimitiveType.FLOAT)
     class Double(val value: kotlin.Double) : SSAConstant(SSAPrimitiveType.DOUBLE)
-    class String(val value: kotlin.String): SSAConstant(ReferenceType())
-}
-
-
-interface SSAInstruction: SSAValue {
-    val operands: MutableList<SSAValue>
-
-    fun replaceBy(replace: SSAValue) {
-        replace.users.addAll(users)
-        for (user in users) {
-            user.operands.replaceAll { op ->
-                if (op === this) {
-                    replace
-                } else {
-                    op
-                }
-            }
-        }
-    }
-
-}
-
-abstract class SSAInstructionBase(
-        override val operands: MutableList<SSAValue> = mutableListOf()
-) : SSAInstruction {
-
-    override val users = mutableSetOf<SSAInstruction>()
-
-    fun appendOperand(operand: SSAValue) {
-        operands += operand
-    }
-}
-
-class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
-    override val type: SSAType = callee.type.returnType
-}
-
-class SSABr(val edge: SSAEdge) : SSAInstructionBase(mutableListOf(edge)) {
-    override val type: SSAType = VoidType
-}
-
-class SSACondBr(val condition: SSAValue, val truEdge: SSAEdge, val flsEdge: SSAEdge)
-    : SSAInstructionBase(mutableListOf(condition, truEdge, flsEdge)) {
-    override val type: SSAType = VoidType
-}
-
-class SSAReturn(val retVal: SSAValue): SSAInstructionBase(mutableListOf(retVal)) {
-    override val type: SSAType = VoidType
+    class String(val value: kotlin.String): SSAConstant(SSAStringType)
 }
 
 class SSAFunction(
