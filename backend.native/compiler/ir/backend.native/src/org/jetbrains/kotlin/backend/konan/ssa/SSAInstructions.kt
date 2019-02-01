@@ -29,6 +29,10 @@ abstract class SSAInstructionBase(
     }
 }
 
+class SSANOP(val comment: String) : SSAInstructionBase() {
+    override val type: SSAType = SpecialType
+}
+
 class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
     override val type: SSAType = callee.type.returnType
 }
@@ -53,3 +57,13 @@ class SSAReturn(val retVal: SSAValue): SSAInstructionBase(mutableListOf(retVal))
 class SSAAlloc(override val type: SSAType): SSAInstructionBase() {
 
 }
+
+class SSAGetField(val receiver: SSAValue, val field: SSAField): SSAInstructionBase() {
+    override val type: SSAType = field.type
+}
+
+class SSASetField(val receiver: SSAValue, val field: SSAField, val value: SSAValue): SSAInstructionBase() {
+    override val type: SSAType = VoidType
+}
+
+class SSAGetObjectValue(override val type: SSAType) : SSAInstructionBase()

@@ -69,6 +69,12 @@ class SSAModuleBuilder {
                     val func = SSAFunctionBuilder(irDeclaration, module).build()
                     module.functions += func
                 }
+                if (irDeclaration is IrClass) {
+                    irDeclaration.declarations.filterIsInstance<IrFunction>().forEach {
+                        val func = SSAFunctionBuilder(it, module).build()
+                        module.functions += func
+                    }
+                }
             }
         }
         return module
@@ -196,40 +202,61 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
                 generateStatement(stmt)
             }
         }
-        is IrExpressionBody -> TODO()
-        is IrSyntheticBody -> TODO()
+        is IrExpressionBody -> TODO("$irBody")
+        is IrSyntheticBody -> TODO("$irBody")
         else -> TODO()
     }
 
     private fun generateStatement(irStmt: IrStatement) {
         when (irStmt) {
-            is IrExpression -> generateExpression(irStmt)
+            is IrExpression -> evalExpression(irStmt)
             is IrVariable -> generateVariable(irStmt)
-            else -> TODO()
+            else -> TODO("$irStmt")
         }
     }
 
     private fun generateVariable(irVariable: IrVariable) {
-        val value = irVariable.initializer?.let { generateExpression(it) }
+        val value = irVariable.initializer?.let { evalExpression(it) }
                 // TODO: explain
                 ?: SSAConstant.Undef
         construct.writeVariable(curBlock, irVariable, value)
     }
 
-    private fun generateExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
-        is IrCall -> generateCall(irExpr)
-        is IrGetValue -> generateGetValue(irExpr)
-        is IrConst<*> -> generateConstant(irExpr)
-        is IrReturn -> generateReturn(irExpr)
-        is IrGetObjectValue -> generateGetObjectValue(irExpr)
-        is IrWhileLoop -> generateWhileLoop(irExpr)
-        is IrWhen -> generateWhen(irExpr)
-        is IrSetVariable -> generateSetVariable(irExpr)
-        is IrContainerExpression -> generateContainerExpression(irExpr)
-        else -> TODO()
+    private fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
+        is IrCall -> evalCall(irExpr)
+        is IrDelegatingConstructorCall -> evalDelegatingConstructorCall(irExpr)
+        is IrGetValue -> evalGetValue(irExpr)
+        is IrConst<*> -> evalConstant(irExpr)
+        is IrReturn -> evalReturn(irExpr)
+        is IrGetObjectValue -> evalGetObjectValue(irExpr)
+        is IrWhileLoop -> evalWhileLoop(irExpr)
+        is IrWhen -> evalWhen(irExpr)
+        is IrSetVariable -> evalSetVariable(irExpr)
+        is IrContainerExpression -> evalContainerExpression(irExpr)
+        is IrGetField -> evalGetField(irExpr)
+        is IrSetField -> evalSetField(irExpr)
+        else -> TODO("$irExpr")
     }
 
-    private fun generateWhen(irWhen: IrWhen): SSAValue =
+    private fun evalSetField(irExpr: IrSetField): SSAValue {
+        val receiver = evalExpression(irExpr.receiver!!)
+        val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
+        val value = evalExpression(irExpr.value)
+        return +SSASetField(receiver, field, value)
+    }
+
+    private fun evalGetField(irExpr: IrGetField): SSAValue {
+        // Static variables has no receiver
+        val receiver = evalExpression(irExpr.receiver!!)
+        val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
+        return +SSAGetField(receiver, field)
+    }
+
+    private fun evalDelegatingConstructorCall(irCall: IrDelegatingConstructorCall): SSAValue {
+        return +SSANOP("Delegating constructor")
+    }
+
+    private fun evalWhen(irWhen: IrWhen): SSAValue =
         WhenGenerator(irWhen).generate()
 
     private inner class WhenGenerator(val irWhen: IrWhen) {
@@ -252,14 +279,14 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
             val nextBlock = if (isLast) exitBlock else SSABlock(func, blockIdGen.next("when_cond"))
             seal(curBlock)
             val result = if (isUnconditional(branch)) {
-                generateExpression(branch.result)
+                evalExpression(branch.result)
             } else {
-                val cond = generateExpression(branch.condition)
+                val cond = evalExpression(branch.condition)
                 val bodyBlock = addBlock("when_body")
                 addCondBr(cond, bodyBlock, nextBlock)
                 curBlock = bodyBlock
                 seal(curBlock)
-                generateExpression(branch.result)
+                evalExpression(branch.result)
             }
 
             if (curBlock.body.isEmpty() || !curBlock.body.last().isTerminal()) {
@@ -290,17 +317,17 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
 
     private fun getUnit(): SSAValue = SSAConstant.Undef
 
-    private fun generateSetVariable(setVariable: IrSetVariable): SSAValue {
-        val value = generateExpression(setVariable.value)
+    private fun evalSetVariable(setVariable: IrSetVariable): SSAValue {
+        val value = evalExpression(setVariable.value)
         construct.writeVariable(curBlock, setVariable.symbol.owner, value)
         return getUnit()
     }
 
-    private fun generateContainerExpression(containerExpr: IrContainerExpression): SSAValue {
+    private fun evalContainerExpression(containerExpr: IrContainerExpression): SSAValue {
         containerExpr.statements.dropLast(1).forEach { generateStatement(it) }
         containerExpr.statements.lastOrNull()?.let {
             if (it is IrExpression) {
-                return generateExpression(it)
+                return evalExpression(it)
             } else {
                 generateStatement(it)
             }
@@ -308,7 +335,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         return getUnit()
     }
 
-    private fun generateWhileLoop(irLoop: IrWhileLoop): SSAValue {
+    private fun evalWhileLoop(irLoop: IrWhileLoop): SSAValue {
         val loopHeader = addBlock("loop_header")
         val loopBody = addBlock("loop_body")
         val loopExit = addBlock("loop_exit")
@@ -316,7 +343,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         addBr(loopHeader)
 
         curBlock = loopHeader
-        val condition = generateExpression(irLoop.condition)
+        val condition = evalExpression(irLoop.condition)
         addCondBr(condition, loopBody, loopExit)
 
         curBlock = loopBody
@@ -349,16 +376,16 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         return edge
     }
 
-    private fun generateGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
+    private fun evalGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
         return +SSAGetObjectValue(typeMapper.map(irExpr.type))
     }
 
-    private fun generateReturn(irReturn: IrReturn): SSAValue {
-        val retVal = generateExpression(irReturn.value)
+    private fun evalReturn(irReturn: IrReturn): SSAValue {
+        val retVal = evalExpression(irReturn.value)
         return +SSAReturn(retVal)
     }
 
-    private fun generateConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
+    private fun evalConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
         IrConstKind.Null -> SSAConstant.Null
         IrConstKind.Boolean -> SSAConstant.Bool(irConst.value as Boolean)
         IrConstKind.Char -> SSAConstant.Char(irConst.value as Char)
@@ -371,11 +398,11 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         IrConstKind.Double -> SSAConstant.Double(irConst.value as Double)
     }
 
-    private fun generateGetValue(irGetValue: IrGetValue): SSAValue {
+    private fun evalGetValue(irGetValue: IrGetValue): SSAValue {
         if (irGetValue.symbol.owner in construct.currentDef) {
             return construct.readVariable(curBlock, irGetValue.symbol.owner)
         } else {
-            TODO("Unsupported operation")
+            return TODO("decide how to work with methods")
         }
     }
 
@@ -391,13 +418,13 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         return this
     }
 
-    private fun generateCall(irCall: IrCall): SSAValue {
+    private fun evalCall(irCall: IrCall): SSAValue {
 
         val function = irCall.symbol.owner
         if (function is IrConstructor) return generateConstructorCall(irCall)
 
         val args = (irCall.getArguments()).map { (_, paramExpr) ->
-            generateExpression(paramExpr)
+            evalExpression(paramExpr)
         }
 
         val callee = declMapper.mapFunction(irCall.symbol.owner)
@@ -422,7 +449,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         val allocationSite = +SSAAlloc(ssaClass)
 
         val args = (irCall.getArguments()).map { (_, paramExpr) ->
-            generateExpression(paramExpr)
+            evalExpression(paramExpr)
         }
 
         val callee = declMapper.mapFunction(constructor)

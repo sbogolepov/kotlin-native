@@ -48,6 +48,9 @@ class SSARender() {
             is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
             is SSABr -> append("$pad br ${renderOperand(insn.edge)}")
             is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}")
+            is SSAGetField -> append("$pad %$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}")
+            is SSASetField -> append("$pad (${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}")
+            is SSANOP -> append("$pad %$track: ${renderType(insn.type)} = NOP \"${insn.comment}\"")
             else -> append("$pad UNSUPPORTED")
         }
     }
@@ -56,6 +59,7 @@ class SSARender() {
         value is SSAConstant -> "${renderConstant(value)}: ${renderType(value.type)}"
         value is SSABlock -> "${value.id}"
         value is SSAEdge -> "${value.to.id}(${value.args.joinToString { renderOperand(it) }})"
+        value is SSAField -> "${value.name}: ${renderType(value.type)}"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}: ${renderType(value.type)}"
         else -> "UNNAMED"
     }

@@ -12,6 +12,11 @@ interface SSAValue {
     val type: SSAType
 }
 
+// TODO: Add receiver?
+class SSAField(val name: String, override val type: SSAType) : SSAValue {
+    override val users: MutableSet<SSAInstruction> = mutableSetOf()
+}
+
 class SSAFuncArgument(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
@@ -19,8 +24,6 @@ class SSAFuncArgument(val name: String, override val type: SSAType) : SSAValue {
 class SSABlockParam(override val type: SSAType, val owner: SSABlock) : SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
 }
-
-class SSAGetObjectValue(override val type: SSAType) : SSAInstructionBase()
 
 sealed class SSAConstant(override val type: SSAType) : SSAValue {
 
