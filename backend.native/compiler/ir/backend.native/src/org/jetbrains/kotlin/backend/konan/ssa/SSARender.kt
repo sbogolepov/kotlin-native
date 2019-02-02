@@ -56,6 +56,7 @@ class SSARender() {
     }
 
     private fun renderOperand(value: SSAValue): String = when {
+        value is SSAReceiver -> "this"
         value is SSAConstant -> "${renderConstant(value)}: ${renderType(value.type)}"
         value is SSABlock -> "${value.id}"
         value is SSAEdge -> "${value.to.id}(${value.args.joinToString { renderOperand(it) }})"
@@ -65,6 +66,7 @@ class SSARender() {
     }
 
     private fun renderType(type: SSAType): String = when (type) {
+        is SSAClass -> type.irClass.name.asString()
         is SSAPrimitiveType -> type.name.toLowerCase()
         is SSAWrapperType -> "wrap(${renderIrType(type.irType)})"
         is SSAFuncType -> "(${type.parameterTypes.joinToString { renderType(it) }}) -> ${renderType(type.returnType)}"

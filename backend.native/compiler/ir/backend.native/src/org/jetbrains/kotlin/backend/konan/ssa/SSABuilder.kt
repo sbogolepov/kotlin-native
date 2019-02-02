@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.irasdescriptors.allParameters
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
@@ -64,20 +65,39 @@ class SSAModuleBuilder {
     fun build(irModule: IrModuleFragment): SSAModule {
         val module = SSAModule()
         for (irFile in irModule.files) {
-            for (irDeclaration in irFile.declarations) {
-                if (irDeclaration is IrFunction) {
-                    val func = SSAFunctionBuilder(irDeclaration, module).build()
+            for (decl in irFile.declarations) {
+                if (decl is IrFunction) {
+                    val func = SSAFunctionBuilder(decl, module).build()
                     module.functions += func
                 }
-                if (irDeclaration is IrClass) {
-                    irDeclaration.declarations.filterIsInstance<IrFunction>().forEach {
-                        val func = SSAFunctionBuilder(it, module).build()
-                        module.functions += func
-                    }
+                if (decl is IrClass) {
+                    module.functions += generateClass(decl, module)
                 }
             }
         }
         return module
+    }
+
+    private fun generateClass(irClass: IrClass, module: SSAModule) =
+            SSAClassBuilder(irClass, module).build()
+}
+
+class SSAClassBuilder(val irClass: IrClass, val module: SSAModule) {
+    private val thisRef = irClass.thisReceiver!!
+
+    fun build(): List<SSAFunction> {
+        val methods = mutableListOf<SSAFunction>()
+        for (decl in irClass.declarations) {
+            if (decl is IrProperty) {
+                decl.getter?.let {
+                    methods += SSAFunctionBuilder(it, module, thisRef).build()
+                }
+                decl.setter?.let {
+                    methods += SSAFunctionBuilder(it, module, thisRef).build()
+                }
+            }
+        }
+        return methods
     }
 }
 
@@ -88,7 +108,8 @@ class SSABlockIdGenerator(var current: Int = 0) {
     }
 }
 
-class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
+// TODO: Pass context about class here?
+class SSAFunctionBuilder(val irFunction: IrFunction, val module: SSAModule, val thisRef: IrValueParameter? = null) {
 
     private val typeMapper = SSATypeMapper()
 
@@ -112,6 +133,15 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     private val construct = object {
         val currentDef = mutableMapOf<IrValueDeclaration, MutableMap<SSABlock, SSAValue>>()
         val incompletePhis = mutableMapOf<SSABlock, MutableMap<IrValueDeclaration, SSAValue>>()
+
+        fun dumpTable() {
+            for ((def, map) in currentDef) {
+                println("--- ${def.name.asString()} --- $def")
+                for ((k, v) in map) {
+                    println("$k $v")
+                }
+            }
+        }
 
         fun writeVariable(block: SSABlock, variable: IrValueDeclaration, value: SSAValue) {
             val blocks = currentDef.getOrPut(variable) { mutableMapOf() }
@@ -181,9 +211,18 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
         return SSABlock(func, blockIdGen.next(name)).add()
     }
 
+    private fun IrType.map() = typeMapper.map(this)
+
     fun build(): SSAFunction {
+        irFunction.dispatchReceiverParameter?.let {
+            // TODO: Reflect in func type somehow
+            val receiver = SSAReceiver(it.type.map())
+            func.receiver = receiver
+            construct.writeVariable(func.entry, it, receiver)
+        }
+
         irFunction.valueParameters.forEach {
-            val param = SSAFuncArgument(it.name.asString(), typeMapper.map(it.type))
+            val param = SSAFuncArgument(it.name.asString(), it.type.map())
             func.params.add(param)
             construct.writeVariable(func.entry, it, param)
         }
@@ -399,10 +438,13 @@ class SSAFunctionBuilder(val irFunction: IrFunction, module: SSAModule) {
     }
 
     private fun evalGetValue(irGetValue: IrGetValue): SSAValue {
-        if (irGetValue.symbol.owner in construct.currentDef) {
-            return construct.readVariable(curBlock, irGetValue.symbol.owner)
+        val declaration = irGetValue.symbol.owner
+        if (declaration in construct.currentDef) {
+            return construct.readVariable(curBlock, declaration)
         } else {
-            return TODO("decide how to work with methods")
+            println("Failed to find ${declaration.name.asString()} --- $declaration")
+            construct.dumpTable()
+            return TODO("decide how to work with `this` in methods")
         }
     }
 

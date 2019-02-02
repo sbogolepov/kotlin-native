@@ -17,6 +17,10 @@ class SSAField(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
 
+class SSAReceiver(override val type: SSAType) : SSAValue {
+    override val users: MutableSet<SSAInstruction> = mutableSetOf()
+}
+
 class SSAFuncArgument(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 }
@@ -47,6 +51,7 @@ class SSAFunction(
         val name: String,
         val type: SSAFuncType
 ): SSACallable {
+    var receiver: SSAReceiver? = null
     val entry = SSABlock(this, SSABlockId.Entry)
     val blocks = mutableListOf(entry)
     val params = mutableListOf<SSAFuncArgument>()
