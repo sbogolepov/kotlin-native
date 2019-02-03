@@ -103,7 +103,7 @@ class SSAModuleBuilder {
 
     fun build(irModule: IrModuleFragment): SSAModule {
         val index = createIndex(irModule)
-        val module = SSAModule(index)
+        val module = SSAModule(irModule.name.asString(), index)
         for ((ir, ssa) in index.functions) {
             module.functions += SSAFunctionBuilder(ssa, module).build(ir)
         }
@@ -237,6 +237,8 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     private fun IrType.map() = typeMapper.map(this)
 
     fun build(irFunction: IrFunction): SSAFunction {
+
+        // TODO: make parameters explicit parameters of the entry block
         irFunction.dispatchReceiverParameter?.let {
             // TODO: Reflect in func type somehow
             val receiver = SSAReceiver(it.type.map())

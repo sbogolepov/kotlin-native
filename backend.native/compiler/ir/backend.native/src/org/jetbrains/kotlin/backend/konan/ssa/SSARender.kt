@@ -7,15 +7,29 @@ private const val padDelta = " "
 
 class SSARender() {
 
+    fun render(module: SSAModule): String = buildString {
+        appendln("--- imports")
+        module.imports.forEach {
+            appendln(renderFuncHeader(it))
+        }
+        appendln("--- declarations")
+        module.functions.forEach {
+            appendln(render(it))
+        }
+    }
+
+    private fun renderFuncHeader(func: SSAFunction): String =
+            "${func.name}(${func.params.joinToString { renderOperand(it) }}): ${renderType(func.type)}"
+
     private var pad = ""
 
     val slotTracker = SSASlotTracker()
 
-    fun render(func: SSAFunction): String = buildString {
+    private fun render(func: SSAFunction): String = buildString {
             func.params.forEach {
                 slotTracker.track(it)
             }
-            appendln("${func.name}(${func.params.joinToString { renderOperand(it) }}): ${renderType(func.type)}")
+            appendln(renderFuncHeader(func))
             for (block in func.blocks) {
                 for (param in block.params) {
                     slotTracker.track(param)

@@ -16,7 +16,6 @@ interface SSAInstruction: SSAValue {
         }
         this.operands.forEach { it.users -= this }
     }
-
 }
 
 abstract class SSAInstructionBase(
@@ -29,6 +28,14 @@ abstract class SSAInstructionBase(
         operands += operand
         operand.users += this
     }
+}
+
+class SSAIncRef(val ref: SSAValue) : SSAInstructionBase() {
+    override val type = VoidType
+}
+
+class SSADecRef(val ref: SSAValue) : SSAInstructionBase() {
+    override val type = VoidType
 }
 
 class SSANOP(val comment: String) : SSAInstructionBase() {

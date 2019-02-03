@@ -1,6 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-class SSAModule(val index: SSAModuleIndex) {
+class SSAModule(val name: String, val index: SSAModuleIndex) {
     val functions = mutableListOf<SSAFunction>()
     val imports = mutableListOf<SSAFunction>()
 }

@@ -38,6 +38,8 @@ enum class SSAPrimitiveType: SSAType {
 class SSAFuncType(
         val returnType: SSAType,
         val parameterTypes: List<SSAType>
-) : SSAType
+) : SSAType {
+    val isVararg = false
+}
 
 class SSABlockType : SSAType
