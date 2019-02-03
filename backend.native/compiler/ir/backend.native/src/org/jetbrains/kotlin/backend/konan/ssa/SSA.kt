@@ -1,6 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-class SSAModule {
+class SSAModule(val index: SSAModuleIndex) {
     val functions = mutableListOf<SSAFunction>()
     val imports = mutableListOf<SSAFunction>()
 }
@@ -55,6 +55,7 @@ class SSAFunction(
     val entry = SSABlock(this, SSABlockId.Entry)
     val blocks = mutableListOf(entry)
     val params = mutableListOf<SSAFuncArgument>()
+    val metadata = mutableListOf<String>()
 }
 
 sealed class SSABlockId {

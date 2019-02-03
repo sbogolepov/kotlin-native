@@ -62,7 +62,7 @@ class SSARender() {
         value is SSAEdge -> "${value.to.id}(${value.args.joinToString { renderOperand(it) }})"
         value is SSAField -> "${value.name}: ${renderType(value.type)}"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}: ${renderType(value.type)}"
-        else -> "UNNAMED"
+        else -> "UNNAMED $value"
     }
 
     private fun renderType(type: SSAType): String = when (type) {

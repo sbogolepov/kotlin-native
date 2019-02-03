@@ -9,14 +9,17 @@ class InlineAccessorsPass(private val func: SSAFunction) : FunctionPass {
                 // TODO: better filter
                 if (insn is SSAMethodCall && insn.callee.isTrivialGetter()) {
                     val getter = insn.callee.blocks[0].body[0] as SSAGetField
-                    insn.replaceBy(SSAGetField(insn.receiver, getter.field))
+                    val replacement = SSAGetField(insn.receiver, getter.field)
+                    val idx = bb.body.indexOf(insn)
+                    bb.body[idx] = replacement
+                    insn.replaceBy(replacement)
                 }
             }
         }
     }
 
     private fun SSAFunction.isTrivialGetter() =
-            name.contains(".<get-")
+            metadata.contains("getter")
                     && blocks.size == 1
                     && blocks[0].body.size == 2
                     && blocks[0].body[0] is SSAGetField

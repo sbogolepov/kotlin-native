@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.allParameters
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
@@ -48,8 +47,16 @@ class SSATypeMapper {
     }
 }
 
+private const val DEBUG = true
+
+private fun ssaDebug(message: String) { if (DEBUG) println(message) }
+
 class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper) {
+
     fun mapFunction(func: IrFunction): SSAFunction {
+        module.index.functions.find { it.first == func }?.let {
+            return it.second
+        }
         val type = SSAFuncType(
                 typeMapper.map(func.returnType),
                 func.valueParameters.map { typeMapper.map(it.type) }
@@ -60,40 +67,62 @@ class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper
     }
 }
 
+class SSAModuleIndex {
+    val functions = mutableListOf<Pair<IrFunction, SSAFunction>>()
+}
+
+// Better to transform to some sort of SymbolTable
 class SSAModuleBuilder {
 
-    fun build(irModule: IrModuleFragment): SSAModule {
-        val module = SSAModule()
+    private val typeMapper = SSATypeMapper()
+
+    private fun createSSAFuncFromIr(irFunction: IrFunction): SSAFunction {
+        val name = irFunction.name.asString()
+        val type = SSAFuncType(
+                typeMapper.map(irFunction.returnType),
+                irFunction.valueParameters.map { typeMapper.map(it.type) }
+        )
+        return SSAFunction(name, type)
+    }
+
+    private fun createIndex(irModule: IrModuleFragment): SSAModuleIndex {
+        val index = SSAModuleIndex()
         for (irFile in irModule.files) {
             for (decl in irFile.declarations) {
                 if (decl is IrFunction) {
-                    val func = SSAFunctionBuilder(decl, module).build()
-                    module.functions += func
+                    val ssa = createSSAFuncFromIr(decl)
+                    index.functions += decl to ssa
                 }
                 if (decl is IrClass) {
-                    module.functions += generateClass(decl, module)
+                    index.functions += indexClassMethods(decl)
                 }
             }
+        }
+        return index
+    }
+
+    fun build(irModule: IrModuleFragment): SSAModule {
+        val index = createIndex(irModule)
+        val module = SSAModule(index)
+        for ((ir, ssa) in index.functions) {
+            module.functions += SSAFunctionBuilder(ssa, module).build(ir)
         }
         return module
     }
 
-    private fun generateClass(irClass: IrClass, module: SSAModule) =
-            SSAClassBuilder(irClass, module).build()
-}
-
-class SSAClassBuilder(val irClass: IrClass, val module: SSAModule) {
-    private val thisRef = irClass.thisReceiver!!
-
-    fun build(): List<SSAFunction> {
-        val methods = mutableListOf<SSAFunction>()
+    private fun indexClassMethods(irClass: IrClass): List<Pair<IrFunction, SSAFunction>> {
+        val methods = mutableListOf<Pair<IrFunction, SSAFunction>>()
         for (decl in irClass.declarations) {
             if (decl is IrProperty) {
                 decl.getter?.let {
-                    methods += SSAFunctionBuilder(it, module, thisRef).build()
+                    val fn = createSSAFuncFromIr(it)
+                    fn.metadata += "getter"
+                    methods += it to fn
                 }
                 decl.setter?.let {
-                    methods += SSAFunctionBuilder(it, module, thisRef).build()
+                    val fn = createSSAFuncFromIr(it)
+                    fn.metadata += "setter"
+                    methods += it to fn
                 }
             }
         }
@@ -109,7 +138,7 @@ class SSABlockIdGenerator(var current: Int = 0) {
 }
 
 // TODO: Pass context about class here?
-class SSAFunctionBuilder(val irFunction: IrFunction, val module: SSAModule, val thisRef: IrValueParameter? = null) {
+class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
     private val typeMapper = SSATypeMapper()
 
@@ -117,12 +146,6 @@ class SSAFunctionBuilder(val irFunction: IrFunction, val module: SSAModule, val 
 
     var blockIdGen = SSABlockIdGenerator()
 
-    val name = irFunction.name.asString()
-    val type = SSAFuncType(
-            typeMapper.map(irFunction.returnType),
-            irFunction.valueParameters.map { typeMapper.map(it.type) }
-    )
-    val func = SSAFunction(name, type)
 
     var curBlock = func.entry
 
@@ -213,7 +236,7 @@ class SSAFunctionBuilder(val irFunction: IrFunction, val module: SSAModule, val 
 
     private fun IrType.map() = typeMapper.map(this)
 
-    fun build(): SSAFunction {
+    fun build(irFunction: IrFunction): SSAFunction {
         irFunction.dispatchReceiverParameter?.let {
             // TODO: Reflect in func type somehow
             val receiver = SSAReceiver(it.type.map())

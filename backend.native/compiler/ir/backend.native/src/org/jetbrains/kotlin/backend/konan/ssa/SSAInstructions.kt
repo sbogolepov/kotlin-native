@@ -3,17 +3,18 @@ package org.jetbrains.kotlin.backend.konan.ssa
 interface SSAInstruction: SSAValue {
     val operands: MutableList<SSAValue>
 
-    fun replaceBy(replace: SSAValue) {
-        replace.users.addAll(users)
+    fun replaceBy(replacement: SSAValue) {
+        replacement.users.addAll(users)
         for (user in users) {
             user.operands.replaceAll { op ->
-                if (op === this) {
-                    replace
+                if (op == this) {
+                    replacement
                 } else {
                     op
                 }
             }
         }
+        this.operands.forEach { it.users -= this }
     }
 
 }
@@ -26,6 +27,7 @@ abstract class SSAInstructionBase(
 
     fun appendOperand(operand: SSAValue) {
         operands += operand
+        operand.users += this
     }
 }
 
