@@ -7,10 +7,6 @@ import llvm.*
 import org.jetbrains.kotlin.backend.konan.llvm.addFunctionSignext
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
-private class Index {
-    private val functions = mutableListOf<Pair<SSAFunction, LLVMValueRef>>()
-}
-
 internal class LLVMModuleFromSSA(val ssaModule: SSAModule) {
 
     private val typeMapper = LLVMTypeMapper()
@@ -50,15 +46,52 @@ internal class LLVMModuleFromSSA(val ssaModule: SSAModule) {
 
 
 
-private class LLVMFunctionFromSSA(val func: SSAFunction) {
+private class LLVMFunctionFromSSA(
+        val ssaFunc: SSAFunction,
+        val llvmFunc: LLVMValueRef,
+        val typeMapper: LLVMTypeMapper
+) {
+
+    private fun SSAType.map() = typeMapper.map(this)
 
     val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
+
+    fun generate(): LLVMValueRef {
+        for (block in ssaFunc.blocks) {
+            blocksMap[block] = LLVMAppendBasicBlock(llvmFunc, block.id.toString())!!
+        }
+        for (block in ssaFunc.blocks) {
+            generateBlock(block)
+        }
+        return llvmFunc
+    }
 
     private fun generateBlock(block: SSABlock) {
 
     }
 
-    private fun generateInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
+    private fun emitValue(value: SSAValue): LLVMValueRef = when (value) {
+        is SSAConstant -> emitConstant(value)
+        is SSAInstruction -> emitInstruction(value)
+    }
+
+    private fun emitConstant(value: SSAConstant): LLVMValueRef {
+        return when (value) {
+            SSAConstant.Undef -> TODO()
+            SSAConstant.Null -> TODO()
+            is SSAConstant.Bool -> LLVMConstInt(value.type.map(), value.value )
+            is SSAConstant.Byte -> TODO()
+            is SSAConstant.Char -> TODO()
+            is SSAConstant.Short -> TODO()
+            is SSAConstant.Int -> TODO()
+            is SSAConstant.Long -> TODO()
+            is SSAConstant.Float -> TODO()
+            is SSAConstant.Double -> TODO()
+            is SSAConstant.String -> TODO()
+        }
+    }
+
+    private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
         is SSACall -> generateCall(insn)
         is SSAReturn -> generateReturn(insn)
         is SSABr -> generateBr(insn)
@@ -75,7 +108,7 @@ private class LLVMFunctionFromSSA(val func: SSAFunction) {
     }
 
     private fun generateReturn(insn: SSAReturn): LLVMValueRef {
-        TODO()
+        LLVMBuildRet()
     }
 
     private fun generateCall(insn: SSACall): LLVMValueRef {

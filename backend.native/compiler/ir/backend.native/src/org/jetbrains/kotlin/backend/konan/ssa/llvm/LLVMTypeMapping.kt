@@ -2,16 +2,14 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import kotlinx.cinterop.cValuesOf
 import llvm.*
-import org.jetbrains.kotlin.backend.konan.ssa.SSAFuncType
-import org.jetbrains.kotlin.backend.konan.ssa.SSAPrimitiveType
-import org.jetbrains.kotlin.backend.konan.ssa.SSAType
-import org.jetbrains.kotlin.backend.konan.ssa.VoidType
+import org.jetbrains.kotlin.backend.konan.ssa.*
 
 internal class LLVMTypeMapper {
 
     fun map(ssaType: SSAType): LLVMTypeRef = when (ssaType) {
         is SSAFuncType -> mapFunctionalType(ssaType)
         is SSAPrimitiveType -> mapPrimitiveType(ssaType)
+        is SSAWrapperType -> mapWrapperType(ssaType)
         VoidType -> LLVMVoidType()!!
         else -> error("Unsupported SSA type: $ssaType")
     }
@@ -34,4 +32,8 @@ internal class LLVMTypeMapper {
                     ssaType.parameterTypes.size,
                     if (ssaType.isVararg) 1 else 0
             )!!
+
+    private fun mapWrapperType(ssaType: SSAWrapperType): LLVMTypeRef {
+
+    }
 }
