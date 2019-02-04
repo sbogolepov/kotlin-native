@@ -464,12 +464,12 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
     private fun evalGetValue(irGetValue: IrGetValue): SSAValue {
         val declaration = irGetValue.symbol.owner
-        if (declaration in construct.currentDef) {
-            return construct.readVariable(curBlock, declaration)
+        return if (declaration in construct.currentDef) {
+            construct.readVariable(curBlock, declaration)
         } else {
             println("Failed to find ${declaration.name.asString()} --- $declaration")
             construct.dumpTable()
-            return TODO("decide how to work with `this` in methods")
+            TODO("decide how to work with `this` in methods")
         }
     }
 
