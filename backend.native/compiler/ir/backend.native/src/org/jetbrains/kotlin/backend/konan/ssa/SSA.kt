@@ -68,6 +68,11 @@ sealed class SSABlockId {
         override fun toString(): String =
             if (name.isEmpty()) "$id" else "${id}_$name"
     }
+
+    object LandingPad : SSABlockId() {
+        override fun toString(): String =
+                "landing_pad"
+    }
 }
 
 class SSAEdge(

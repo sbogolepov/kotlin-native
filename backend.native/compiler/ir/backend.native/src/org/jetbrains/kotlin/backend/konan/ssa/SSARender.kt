@@ -53,19 +53,27 @@ class SSARender() {
     private fun render(insn: SSAInstruction): String = buildString {
 
         val track = slotTracker.slot(insn)
+        append("$pad ")
+        append(when (insn) {
+            is SSACallSite -> renderCallSite(insn)
+            is SSAAlloc ->      "%$track: ${renderType(insn.type)} = allocate"
+            is SSAGetField ->   "%$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}"
+            is SSANOP ->        "%$track: ${renderType(insn.type)} = NOP \"${insn.comment}\""
+            is SSAGetObjectValue -> "%$track ${renderType(insn.type)} = GET OBJECT VALUE"
+            is SSAReturn ->     "ret ${renderOperand(insn.retVal)}"
+            is SSABr ->         "br ${renderOperand(insn.edge)}"
+            is SSACondBr ->     "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
+            is SSASetField -> "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"
+            else -> "UNSUPPORTED"
+        })
+    }
 
+    private fun renderCallSite(insn: SSACallSite): String = buildString {
+        val track = slotTracker.slot(insn)
         when (insn) {
-            is SSACall -> append("$pad %$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}")
-            is SSAMethodCall -> append("$pad %$track: ${renderType(insn.type)} = call (${renderOperand(insn.operands[0])}).${insn.callee.name} ${insn.operands.drop(1).joinToString { renderOperand(it) }}")
-            is SSAAlloc -> append("$pad %$track: ${renderType(insn.type)} = allocate")
-            is SSAGetObjectValue -> append("$pad %$track = GET OBJECT VALUE")
-            is SSAReturn -> append("$pad ret ${renderOperand(insn.retVal)}")
-            is SSABr -> append("$pad br ${renderOperand(insn.edge)}")
-            is SSACondBr -> append("$pad condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}")
-            is SSAGetField -> append("$pad %$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}")
-            is SSASetField -> append("$pad (${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}")
-            is SSANOP -> append("$pad %$track: ${renderType(insn.type)} = NOP \"${insn.comment}\"")
-            else -> append("$pad UNSUPPORTED")
+            is SSACall, is SSAMethodCall -> "%$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
+            is SSAInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${insn.continuation} except ${insn.exception}"
+            is SSAMethodInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${insn.continuation} except ${insn.exception}"
         }
     }
 

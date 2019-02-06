@@ -2,9 +2,9 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes
 
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
-class InlineAccessorsPass(private val func: SSAFunction) : FunctionPass {
+class InlineAccessorsPass(val function: SSAFunction) : FunctionPass {
     override fun apply() {
-        for (bb in func.blocks) {
+        for (bb in function.blocks) {
             for (insn in bb.body) {
                 // TODO: better filter
                 if (insn is SSAMethodCall && insn.callee.isTrivialGetter()) {

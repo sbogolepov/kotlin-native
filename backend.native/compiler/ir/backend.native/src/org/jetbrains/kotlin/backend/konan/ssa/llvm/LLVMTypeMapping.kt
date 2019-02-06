@@ -34,6 +34,6 @@ internal class LLVMTypeMapper {
             )!!
 
     private fun mapWrapperType(ssaType: SSAWrapperType): LLVMTypeRef {
-
+        return TODO()
     }
 }

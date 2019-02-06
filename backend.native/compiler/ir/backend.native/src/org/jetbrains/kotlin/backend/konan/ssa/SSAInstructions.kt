@@ -14,13 +14,17 @@ interface SSAInstruction: SSAValue {
                 }
             }
         }
-        this.operands.forEach { it.users -= this }
+        operands.forEach { it.users -= this }
     }
 }
 
 abstract class SSAInstructionBase(
-        override val operands: MutableList<SSAValue> = mutableListOf()
+        final override val operands: MutableList<SSAValue> = mutableListOf()
 ) : SSAInstruction {
+
+    init {
+        operands.forEach { it.users += this }
+    }
 
     override val users = mutableSetOf<SSAInstruction>()
 
@@ -42,13 +46,38 @@ class SSANOP(val comment: String) : SSAInstructionBase() {
     override val type: SSAType = SpecialType
 }
 
-class SSACall(val callee: SSAFunction) : SSAInstructionBase() {
-    override val type: SSAType = callee.type.returnType
+interface SSAReceiverAccessor {
+    val receiver: SSAValue
 }
 
-class SSAMethodCall(val receiver: SSAValue, val callee: SSAFunction): SSAInstructionBase(mutableListOf(receiver)) {
-    override val type: SSAType = callee.type.returnType
+interface SSACallSite : SSAInstruction {
+    val callee: SSAFunction
+
+    override val type: SSAType
+        get() = callee.type.returnType
 }
+
+class SSACall(
+        override val callee: SSAFunction
+) : SSAInstructionBase(), SSACallSite
+
+class SSAMethodCall(
+        override val receiver: SSAValue,
+        override val callee: SSAFunction
+) : SSAInstructionBase(mutableListOf(receiver)), SSACallSite, SSAReceiverAccessor
+
+class SSAInvoke(
+        override val callee: SSAFunction,
+        val continuation: SSAEdge,
+        val exception: SSAEdge
+) : SSAInstructionBase(), SSACallSite
+
+class SSAMethodInvoke(
+        override val receiver: SSAValue,
+        override val callee: SSAFunction,
+        val continuation: SSAEdge,
+        val exception: SSAEdge
+): SSAInstructionBase(mutableListOf(receiver)), SSACallSite, SSAReceiverAccessor
 
 class SSABr(val edge: SSAEdge) : SSAInstructionBase(mutableListOf(edge)) {
     override val type: SSAType = VoidType
@@ -67,11 +96,18 @@ class SSAAlloc(override val type: SSAType): SSAInstructionBase() {
 
 }
 
-class SSAGetField(val receiver: SSAValue, val field: SSAField): SSAInstructionBase() {
+class SSAGetField(
+        override val receiver: SSAValue,
+        val field: SSAField
+): SSAInstructionBase(), SSAReceiverAccessor {
     override val type: SSAType = field.type
 }
 
-class SSASetField(val receiver: SSAValue, val field: SSAField, val value: SSAValue): SSAInstructionBase() {
+class SSASetField(
+        override val receiver: SSAValue,
+        val field: SSAField,
+        val value: SSAValue
+): SSAInstructionBase(), SSAReceiverAccessor {
     override val type: SSAType = VoidType
 }
 
