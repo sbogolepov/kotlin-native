@@ -28,7 +28,9 @@ abstract class SSAInstructionBase(
 ) : SSAInstruction {
 
     init {
-        operands.forEach { it.users += this }
+        operands.forEach { operand ->
+            operand.users += this
+        }
     }
 
     override val users = mutableSetOf<SSAInstruction>()
@@ -97,15 +99,16 @@ class SSACondBr(val condition: SSAValue, val truEdge: SSAEdge, val flsEdge: SSAE
     override val type: SSAType = VoidType
 }
 
-class SSAReturn(
-        val retVal: SSAValue?, override val owner: SSABlock
+class SSAReturn(retVal: SSAValue?, override val owner: SSABlock
 ): SSAInstructionBase(if (retVal != null) mutableListOf(retVal) else mutableListOf()) {
     override val type: SSAType = VoidType
+
+    // replaceBy may invalidate retVal so we recompute it each time
+    val retVal: SSAValue?
+        get() = operands.getOrNull(0)
 }
 
-class SSAAlloc(override val type: SSAType, override val owner: SSABlock): SSAInstructionBase() {
-
-}
+class SSAAlloc(override val type: SSAType, override val owner: SSABlock): SSAInstructionBase()
 
 class SSAGetField(
         override val receiver: SSAValue,

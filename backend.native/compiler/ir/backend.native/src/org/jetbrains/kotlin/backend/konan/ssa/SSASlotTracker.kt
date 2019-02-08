@@ -11,4 +11,6 @@ class SSASlotTracker() {
     }
 
     fun isTracked(value: SSAValue) = value in tracker
+
+    fun clear() = tracker.clear()
 }

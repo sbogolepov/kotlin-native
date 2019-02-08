@@ -60,24 +60,28 @@ private class LLVMFunctionFromSSA(
             }
         }
         for (block in ssaFunc.blocks) {
-            val bb = blocksMap.getValue(block)
-            codegen.positionAtEnd(bb)
             generateBlock(block)
         }
         return llvmFunc
     }
 
     private fun generateBlock(block: SSABlock) {
+        val bb = blocksMap.getValue(block)
+        codegen.positionAtEnd(bb)
         for (insn in block.body) {
-            emitInstruction(insn)
+            emitValue(insn)
         }
     }
 
-    private fun emitValue(value: SSAValue): LLVMValueRef = when (value) {
-        is SSAConstant -> emitConstant(value)
-        is SSAInstruction -> emitInstruction(value)
-        is SSAFuncArgument -> emitFuncArgument(value)
-        else -> error("Unsupported value type $value")
+    private val valueCache = mutableMapOf<SSAValue, LLVMValueRef>()
+
+    private fun emitValue(value: SSAValue): LLVMValueRef = valueCache.getOrPut(value) {
+        when (value) {
+            is SSAConstant -> emitConstant(value)
+            is SSAInstruction -> emitInstruction(value)
+            is SSAFuncArgument -> emitFuncArgument(value)
+            else -> error("Unsupported value type $value")
+        }
     }
 
     private fun emitFuncArgument(value: SSAFuncArgument): LLVMValueRef =
@@ -97,11 +101,12 @@ private class LLVMFunctionFromSSA(
         is SSAConstant.Long -> LLVMConstInt(LLVMInt64Type(), value.value, 1)!!
         is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
         is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
-        is SSAConstant.String -> TODO()
+        is SSAConstant.String -> TODO("String constants are not implemented")
     }
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
         is SSACall -> emitCall(insn)
+        is SSAMethodCall -> emitMethodCall(insn)
         is SSAInvoke -> emitInvoke(insn)
         is SSAMethodInvoke -> emitMethodInvoke(insn)
         is SSAReturn -> emitReturn(insn)
@@ -148,6 +153,12 @@ private class LLVMFunctionFromSSA(
         return codegen.call(callee, args)
     }
 
+    private fun emitMethodCall(insn: SSAMethodCall): LLVMValueRef {
+        val callee = llvmDeclarations.functions.getValue(insn.callee)
+        val args = insn.operands.map { emitValue(it) }
+        return codegen.call(callee, args)
+    }
+
     private fun emitInvoke(insn: SSAInvoke): LLVMValueRef {
         val callee = llvmDeclarations.functions.getValue(insn.callee)
         val args = insn.operands.map { emitValue(it) }
@@ -161,7 +172,8 @@ private class LLVMFunctionFromSSA(
     private fun emitMethodInvoke(insn: SSAMethodInvoke): LLVMValueRef {
         val callee = llvmDeclarations.functions.getValue(insn.callee)
         val args = insn.operands.map { emitValue(it) }
-        // TODO: phis
+        mapArgsToPhis(insn.continuation)
+        mapArgsToPhis(insn.exception)
         val thenBlock = blocksMap.getValue(insn.continuation.to)
         val catchBlock = blocksMap.getValue(insn.exception.to)
         return codegen.invoke(callee, args, thenBlock, catchBlock)

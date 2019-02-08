@@ -11,7 +11,9 @@ class CallsLoweringPass : FunctionPass {
     override fun apply(function: SSAFunction) {
         val landingPad: Lazy<SSABlock> = lazy { SSABlock(function, SSABlockId.LandingPad) }
 
-        val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block -> body + lowerBlock(function, block, landingPad) }
+        val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block ->
+            body + lowerBlock(function, block, landingPad)
+        }
 
         function.blocks.clear()
         function.blocks += newBody
@@ -37,11 +39,17 @@ class CallsLoweringPass : FunctionPass {
                 val excEdge = SSAEdge(curBlock, landingPad.value)
 
                 val newCallSite = when (insn) {
-                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock)
-                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock)
+                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock).apply {
+                        insn.operands.drop(1).forEach { appendOperand(it) }
+                    }
+                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock).apply {
+                        insn.operands.forEach { appendOperand(it) }
+                    }
                     else -> error("Unexpected call site type: $insn")
                 }
+                insn.replaceBy(newCallSite)
                 curBlock.body += newCallSite
+
                 blocks += curBlock
                 curBlock = nextBlock
             } else {
