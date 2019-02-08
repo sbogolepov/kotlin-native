@@ -94,9 +94,12 @@ class SSAEdge(
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 
     override val type: SSAType = SpecialType
+
+    fun changeSrc(newSrc: SSABlock): SSAEdge =
+            SSAEdge(newSrc, to, args)
 }
 
-class SSABlock(val func: SSAFunction, val id: SSABlockId = SSABlockId.Simple()): SSAValue {
+class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple()): SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
 

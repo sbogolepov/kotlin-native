@@ -44,19 +44,16 @@ private class LLVMFunctionFromSSA(
     private fun SSAType.map() = typeMapper.map(this)
 
     val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
-    val blockToPhis = mutableMapOf<LLVMBasicBlockRef, MutableList<LLVMValueRef>>()
+    val blockParamToPhi = mutableMapOf<SSABlockParam, LLVMValueRef>()
 
     fun generate(): LLVMValueRef {
         for (block in ssaFunc.blocks) {
-            blocksMap[block] = LLVMAppendBasicBlock(llvmFunc, block.id.toString())!!
-            if (block.params.isNotEmpty()) {
-                val bb = blocksMap.getValue(block)
-                codegen.positionAtEnd(bb)
-                blockToPhis[bb] = mutableListOf()
-                for (param in block.params) {
-                    val phi = codegen.phi(param.type.map())
-                    blockToPhis.getValue(bb).add(phi)
-                }
+            val bb = LLVMAppendBasicBlock(llvmFunc, block.id.toString())!!
+            blocksMap[block] = bb
+            codegen.positionAtEnd(bb)
+            for (param in block.params) {
+                val phi = codegen.phi(param.type.map())
+                blockParamToPhi[param] = phi
             }
         }
         for (block in ssaFunc.blocks) {
@@ -80,9 +77,13 @@ private class LLVMFunctionFromSSA(
             is SSAConstant -> emitConstant(value)
             is SSAInstruction -> emitInstruction(value)
             is SSAFuncArgument -> emitFuncArgument(value)
+            is SSABlockParam -> emitBlockParam(value)
             else -> error("Unsupported value type $value")
         }
     }
+
+    private fun emitBlockParam(value: SSABlockParam): LLVMValueRef =
+        blockParamToPhi.getValue(value)
 
     private fun emitFuncArgument(value: SSAFuncArgument): LLVMValueRef =
             codegen.getParam(paramIndex.getValue(value))
@@ -180,10 +181,11 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun mapArgsToPhis(edge: SSAEdge) {
-        val dest = blocksMap.getValue(edge.to)
+        val src = blocksMap.getValue(edge.from)
         edge.args.forEachIndexed { idx, value ->
-            val phi = blockToPhis.getValue(dest)[idx]
-            codegen.addIncoming(phi, dest to emitValue(value))
+            val blockParam = edge.to.params[idx]
+            val phi = blockParamToPhi.getValue(blockParam)
+            codegen.addIncoming(phi, src to emitValue(value))
         }
     }
 }

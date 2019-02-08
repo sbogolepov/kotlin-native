@@ -94,9 +94,16 @@ class SSABr(val edge: SSAEdge, override val owner: SSABlock) : SSAInstructionBas
     override val type: SSAType = VoidType
 }
 
-class SSACondBr(val condition: SSAValue, val truEdge: SSAEdge, val flsEdge: SSAEdge, override val owner: SSABlock)
-    : SSAInstructionBase(mutableListOf(condition, truEdge, flsEdge)) {
+class SSACondBr(
+        condition: SSAValue,
+        val truEdge: SSAEdge,
+        val flsEdge: SSAEdge,
+        override val owner: SSABlock
+) : SSAInstructionBase(mutableListOf(condition, truEdge, flsEdge)) {
     override val type: SSAType = VoidType
+
+    val condition: SSAValue
+        get() = operands[0]
 }
 
 class SSAReturn(retVal: SSAValue?, override val owner: SSABlock

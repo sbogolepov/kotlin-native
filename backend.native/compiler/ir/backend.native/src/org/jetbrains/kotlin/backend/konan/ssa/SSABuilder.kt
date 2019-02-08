@@ -239,7 +239,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
         // TODO: make parameters explicit parameters of the entry block
         irFunction.dispatchReceiverParameter?.let {
-            // TODO: Reflect in func type somehow
+            // TODO: Reflect in owner type somehow
             val receiver = SSAReceiver(it.type.map())
             func.receiver = receiver
             construct.writeVariable(func.entry, it, receiver)
@@ -471,7 +471,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     fun SSABlock.add(): SSABlock {
-        func.blocks += this
+        owner.blocks += this
         return this
     }
 

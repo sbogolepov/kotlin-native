@@ -53,7 +53,15 @@ class CallsLoweringPass : FunctionPass {
                 blocks += curBlock
                 curBlock = nextBlock
             } else {
-                curBlock.body += insn
+                curBlock.body += when (insn) {
+                    is SSABr -> SSABr(insn.edge.changeSrc(curBlock), curBlock)
+                    is SSACondBr -> SSACondBr(
+                            insn.condition,
+                            insn.truEdge.changeSrc(curBlock),
+                            insn.flsEdge.changeSrc(curBlock),
+                            curBlock)
+                    else -> insn
+                }
             }
         }
         if (blocks.isEmpty() || blocks.last() != curBlock) {
