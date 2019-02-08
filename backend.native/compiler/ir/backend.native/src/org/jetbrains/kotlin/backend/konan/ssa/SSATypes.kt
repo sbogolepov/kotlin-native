@@ -17,10 +17,7 @@ object NullRefType : ReferenceType()
 
 object SSAStringType : ReferenceType()
 
-class SSAClass(val irClass: IrClass) : ReferenceType() {
-
-}
-
+class SSAClass(val irClass: IrClass) : ReferenceType()
 
 class SSAWrapperType(val irType: IrType): SSAType
 

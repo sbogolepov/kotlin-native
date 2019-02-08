@@ -2,14 +2,15 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes
 
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
-class InlineAccessorsPass(val function: SSAFunction) : FunctionPass {
-    override fun apply() {
+class InlineAccessorsPass : FunctionPass {
+
+    override fun apply(function: SSAFunction) {
         for (bb in function.blocks) {
             for (insn in bb.body) {
                 // TODO: better filter
                 if (insn is SSAMethodCall && insn.callee.isTrivialGetter()) {
                     val getter = insn.callee.blocks[0].body[0] as SSAGetField
-                    val replacement = SSAGetField(insn.receiver, getter.field)
+                    val replacement = SSAGetField(insn.receiver, getter.field, insn.owner)
                     val idx = bb.body.indexOf(insn)
                     bb.body[idx] = replacement
                     insn.replaceBy(replacement)

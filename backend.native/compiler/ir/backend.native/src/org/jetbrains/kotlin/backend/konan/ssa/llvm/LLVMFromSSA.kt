@@ -11,7 +11,7 @@ internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule)
     private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!
     private val target = context.config.target
     val runtimeFile = context.config.distribution.runtime(target)
-    val runtime = Runtime(runtimeFile) // TODO: dispose
+    val runtime = Runtime(runtimeFile)
 
     private val typeMapper = LLVMTypeMapper(runtime)
 
@@ -60,6 +60,8 @@ private class LLVMFunctionFromSSA(
             }
         }
         for (block in ssaFunc.blocks) {
+            val bb = blocksMap.getValue(block)
+            codegen.positionAtEnd(bb)
             generateBlock(block)
         }
         return llvmFunc
@@ -101,12 +103,18 @@ private class LLVMFunctionFromSSA(
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
         is SSACall -> emitCall(insn)
         is SSAInvoke -> emitInvoke(insn)
+        is SSAMethodInvoke -> emitMethodInvoke(insn)
         is SSAReturn -> emitReturn(insn)
         is SSABr -> emitBr(insn)
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
+//        is SSAGetObjectValue -> emitGetObjectValue()
         else -> error("Unsupported instruction: $insn")
     }
+
+//    private fun emitGetObjectValue(): LLVMValueRef {
+//
+//    }
 
     private fun emitAlloc(insn: SSAAlloc): LLVMValueRef {
         return codegen.heapAlloc(insn.type.map())
@@ -121,7 +129,6 @@ private class LLVMFunctionFromSSA(
         return codegen.condBr(cond, truDest, flsDest)
     }
 
-    // TODO: translate edge args to phi
     private fun emitBr(insn: SSABr): LLVMValueRef {
         mapArgsToPhis(insn.edge)
         val dest = blocksMap.getValue(insn.edge.to)
@@ -129,7 +136,9 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitReturn(insn: SSAReturn): LLVMValueRef {
-        val retval = emitValue(insn.retVal)
+        val retval = insn.retVal?.let {
+            emitValue(it)
+        }
         return codegen.ret(retval)
     }
 
@@ -140,6 +149,16 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitInvoke(insn: SSAInvoke): LLVMValueRef {
+        val callee = llvmDeclarations.functions.getValue(insn.callee)
+        val args = insn.operands.map { emitValue(it) }
+        mapArgsToPhis(insn.continuation)
+        mapArgsToPhis(insn.exception)
+        val thenBlock = blocksMap.getValue(insn.continuation.to)
+        val catchBlock = blocksMap.getValue(insn.exception.to)
+        return codegen.invoke(callee, args, thenBlock, catchBlock)
+    }
+
+    private fun emitMethodInvoke(insn: SSAMethodInvoke): LLVMValueRef {
         val callee = llvmDeclarations.functions.getValue(insn.callee)
         val args = insn.operands.map { emitValue(it) }
         // TODO: phis

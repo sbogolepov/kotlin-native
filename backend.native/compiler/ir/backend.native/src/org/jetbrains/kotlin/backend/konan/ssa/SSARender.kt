@@ -70,7 +70,7 @@ class SSARender {
             is SSAGetField ->   "%$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}"
             is SSANOP ->        "%$track: ${renderType(insn.type)} = NOP \"${insn.comment}\""
             is SSAGetObjectValue -> "%$track ${renderType(insn.type)} = GET OBJECT VALUE"
-            is SSAReturn ->     "ret ${renderOperand(insn.retVal)}"
+            is SSAReturn ->     "ret ${if (insn.retVal != null) renderOperand(insn.retVal) else ""}"
             is SSABr ->         "br ${renderOperand(insn.edge)}"
             is SSACondBr ->     "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
             is SSASetField -> "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"

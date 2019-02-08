@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.ir.declarations.IrFunction
+
 class SSAModule(val name: String, val index: SSAModuleIndex) {
     val externalTypes = mutableListOf<SSAWrapperType>()
     val types = mutableListOf<SSAType>()
@@ -51,7 +53,8 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
 
 class SSAFunction(
         val name: String,
-        val type: SSAFuncType
+        val type: SSAFuncType,
+        val irOrigin: IrFunction? = null
 ): SSACallable {
     var receiver: SSAReceiver? = null
     val entry = SSABlock(this, SSABlockId.Entry)

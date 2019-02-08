@@ -18,7 +18,8 @@ internal class LLVMCodeGenerator(
 
     fun br(dest: LLVMBasicBlockRef) = LLVMBuildBr(builder, dest)!!
 
-    fun ret(value: LLVMValueRef) = LLVMBuildRet(builder, value)!!
+    fun ret(value: LLVMValueRef?): LLVMValueRef =
+            if (value == null) LLVMBuildRetVoid(builder)!! else LLVMBuildRet(builder, value)!!
 
     fun phi(ty: LLVMTypeRef) = LLVMBuildPhi(builder, ty, "")!!
 

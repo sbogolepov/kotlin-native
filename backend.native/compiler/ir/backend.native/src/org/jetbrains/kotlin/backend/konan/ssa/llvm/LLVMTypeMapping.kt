@@ -35,6 +35,6 @@ internal class LLVMTypeMapper(val runtime: Runtime) {
             )!!
 
     private fun mapWrapperType(ssaType: SSAWrapperType): LLVMTypeRef {
-        return runtime.objHeaderType
+        return runtime.objHeaderPtrType
     }
 }

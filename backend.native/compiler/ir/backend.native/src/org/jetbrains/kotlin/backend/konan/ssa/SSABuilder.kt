@@ -61,7 +61,7 @@ class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper
                 typeMapper.map(func.returnType),
                 func.valueParameters.map { typeMapper.map(it.type) }
         )
-        val ssaFunction = SSAFunction(getFqName(func).asString(), type)
+        val ssaFunction = SSAFunction(getFqName(func).asString(), type, func)
         module.imports += ssaFunction
         return ssaFunction
     }
@@ -305,18 +305,18 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         val receiver = evalExpression(irExpr.receiver!!)
         val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
         val value = evalExpression(irExpr.value)
-        return +SSASetField(receiver, field, value)
+        return +SSASetField(receiver, field, value, curBlock)
     }
 
     private fun evalGetField(irExpr: IrGetField): SSAValue {
         // Static variables has no receiver
         val receiver = evalExpression(irExpr.receiver!!)
         val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
-        return +SSAGetField(receiver, field)
+        return +SSAGetField(receiver, field, curBlock)
     }
 
     private fun evalDelegatingConstructorCall(irCall: IrDelegatingConstructorCall): SSAValue {
-        return +SSANOP("Delegating constructor")
+        return +SSANOP("Delegating constructor", curBlock)
     }
 
     private fun evalWhen(irWhen: IrWhen): SSAValue =
@@ -422,23 +422,21 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     fun addBr(to: SSABlock): SSABr =
-        SSABr(SSAEdge(curBlock, to)).also {
-            curBlock.body.add(it)
-        }
+        +SSABr(SSAEdge(curBlock, to), curBlock)
 
     fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
         val truEdge = SSAEdge(curBlock, tru)
         val flsEdge = SSAEdge(curBlock,fls)
-        curBlock.body.add(SSACondBr(cond, truEdge, flsEdge))
+        +SSACondBr(cond, truEdge, flsEdge, curBlock)
     }
 
     private fun evalGetObjectValue(irExpr: IrGetObjectValue): SSAValue {
-        return +SSAGetObjectValue(typeMapper.map(irExpr.type))
+        return +SSAGetObjectValue(typeMapper.map(irExpr.type), curBlock)
     }
 
     private fun evalReturn(irReturn: IrReturn): SSAValue {
         val retVal = evalExpression(irReturn.value)
-        return +SSAReturn(retVal)
+        return +SSAReturn(retVal, curBlock)
     }
 
     private fun evalConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
@@ -490,12 +488,12 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
         if (irCall.dispatchReceiver != null) {
             val receiver = args[0]
-            return +SSAMethodCall(receiver, callee).apply {
+            return +SSAMethodCall(receiver, callee, curBlock).apply {
                 args.drop(1).forEach { appendOperand(it) }
             }
         }
 
-        return +SSACall(callee).apply {
+        return +SSACall(callee, curBlock).apply {
             args.forEach { appendOperand(it) }
         }
     }
@@ -505,14 +503,14 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         val irClass = (irCall.symbol as IrConstructorSymbol).owner.constructedClass
 
         val ssaClass = SSAClass(irClass)
-        val allocationSite = +SSAAlloc(ssaClass)
+        val allocationSite = +SSAAlloc(ssaClass, curBlock)
 
         val args = (irCall.getArguments()).map { (_, paramExpr) ->
             evalExpression(paramExpr)
         }
 
         val callee = declMapper.mapFunction(constructor)
-        +SSAMethodCall(allocationSite, callee).apply {
+        +SSAMethodCall(allocationSite, callee, curBlock).apply {
             args.forEach { appendOperand(it) }
         }
 

@@ -6,12 +6,12 @@ import org.jetbrains.kotlin.backend.konan.ssa.*
  * To simplify translation to LLVM we can lower `SSACall` to `SSAInvoke`.
  * It will lead to 1 to 1 mapping of basic blocks.
  */
-class CallsLoweringPass(val function: SSAFunction) : FunctionPass {
+class CallsLoweringPass : FunctionPass {
 
-    private val landingPad: Lazy<SSABlock> = lazy { SSABlock(function, SSABlockId.LandingPad) }
+    override fun apply(function: SSAFunction) {
+        val landingPad: Lazy<SSABlock> = lazy { SSABlock(function, SSABlockId.LandingPad) }
 
-    override fun apply() {
-        val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block -> body + lowerBlock(function, block) }
+        val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block -> body + lowerBlock(function, block, landingPad) }
 
         function.blocks.clear()
         function.blocks += newBody
@@ -20,7 +20,7 @@ class CallsLoweringPass(val function: SSAFunction) : FunctionPass {
         }
     }
 
-    private fun lowerBlock(function: SSAFunction, block: SSABlock): List<SSABlock> {
+    private fun lowerBlock(function: SSAFunction, block: SSABlock, landingPad: Lazy<SSABlock>): List<SSABlock> {
 
         val blocks = mutableListOf<SSABlock>()
 
@@ -37,8 +37,8 @@ class CallsLoweringPass(val function: SSAFunction) : FunctionPass {
                 val excEdge = SSAEdge(curBlock, landingPad.value)
 
                 val newCallSite = when (insn) {
-                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge)
-                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge)
+                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock)
+                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock)
                     else -> error("Unexpected call site type: $insn")
                 }
                 curBlock.body += newCallSite
