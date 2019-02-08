@@ -6,7 +6,9 @@ class SSASlotTracker() {
 
     fun track(value: SSAValue) = tracker.add(value)
 
-    fun slot(value: SSAValue) = tracker.indexOf(value)
+    fun slot(value: SSAValue) = tracker.indexOf(value).also {
+        if (it == -1) println("untracked value: $value")
+    }
 
     fun isTracked(value: SSAValue) = value in tracker
 }

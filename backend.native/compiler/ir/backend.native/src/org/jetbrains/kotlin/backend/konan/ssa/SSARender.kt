@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 
 private const val padDelta = " "
 
-class SSARender() {
+class SSARender {
 
     fun render(module: SSAModule): String = buildString {
         appendln("--- imports")
@@ -23,26 +23,37 @@ class SSARender() {
 
     private var pad = ""
 
-    val slotTracker = SSASlotTracker()
+    private val slotTracker = SSASlotTracker()
 
-    private fun render(func: SSAFunction): String = buildString {
-            func.params.forEach {
-                slotTracker.track(it)
+    private val blockTracker = SSASlotTracker()
+
+    private fun renderBlock(block: SSABlock) =
+            "${block.id}${blockTracker.slot(block)}"
+
+    private fun render(func: SSAFunction): String {
+        func.params.forEach {
+            slotTracker.track(it)
+        }
+        for (block in func.blocks) {
+            blockTracker.track(block)
+            for (param in block.params) {
+                slotTracker.track(param)
             }
+            for (insn in block.body) {
+                slotTracker.track(insn)
+            }
+
+        }
+        return buildString {
             appendln(renderFuncHeader(func))
             for (block in func.blocks) {
-                for (param in block.params) {
-                    slotTracker.track(param)
-                }
-                for (insn in block.body) {
-                    slotTracker.track(insn)
-                }
                 appendln(render(block))
             }
         }
+    }
 
     private fun render(block: SSABlock): String = buildString {
-        appendln("block ${block.id}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }})")
+        appendln("block ${renderBlock(block)}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }}):")
         pad = padDelta
         for (insn in block.body) {
             appendln(render(insn))
@@ -51,7 +62,6 @@ class SSARender() {
     }
 
     private fun render(insn: SSAInstruction): String = buildString {
-
         val track = slotTracker.slot(insn)
         append("$pad ")
         append(when (insn) {
@@ -70,18 +80,19 @@ class SSARender() {
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {
         val track = slotTracker.slot(insn)
-        when (insn) {
+        append(when (insn) {
             is SSACall, is SSAMethodCall -> "%$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
-            is SSAInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${insn.continuation} except ${insn.exception}"
-            is SSAMethodInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${insn.continuation} except ${insn.exception}"
-        }
+            is SSAInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
+            is SSAMethodInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
+            else -> error("Unknown callSite type: $insn")
+        })
     }
 
     private fun renderOperand(value: SSAValue): String = when {
         value is SSAReceiver -> "this"
         value is SSAConstant -> "${renderConstant(value)}: ${renderType(value.type)}"
-        value is SSABlock -> "${value.id}"
-        value is SSAEdge -> "${value.to.id}(${value.args.joinToString { renderOperand(it) }})"
+        value is SSABlock -> renderBlock(value)
+        value is SSAEdge -> "${renderBlock(value.to)}(${value.args.joinToString { renderOperand(it) }})"
         value is SSAField -> "${value.name}: ${renderType(value.type)}"
         slotTracker.isTracked(value) -> "%${slotTracker.slot(value)}: ${renderType(value.type)}"
         else -> "UNNAMED $value"

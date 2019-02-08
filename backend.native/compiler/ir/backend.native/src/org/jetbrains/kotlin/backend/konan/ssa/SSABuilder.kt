@@ -130,10 +130,9 @@ class SSAModuleBuilder {
     }
 }
 
-class SSABlockIdGenerator(var current: Int = 0) {
-
+class SSABlockIdGenerator {
     fun next(suffix: String): SSABlockId {
-        return SSABlockId.Simple(current++, suffix)
+        return SSABlockId.Simple(suffix)
     }
 }
 
@@ -423,21 +422,14 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     fun addBr(to: SSABlock): SSABr =
-        SSABr(createEdgeTo(to)).also {
+        SSABr(SSAEdge(curBlock, to)).also {
             curBlock.body.add(it)
         }
 
     fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
-        val truEdge = createEdgeTo(tru)
-        val flsEdge = createEdgeTo(fls)
+        val truEdge = SSAEdge(curBlock, tru)
+        val flsEdge = SSAEdge(curBlock,fls)
         curBlock.body.add(SSACondBr(cond, truEdge, flsEdge))
-    }
-
-    private fun createEdgeTo(to: SSABlock): SSAEdge {
-        val edge = SSAEdge(curBlock, to)
-        curBlock.succs.add(edge)
-        to.preds.add(edge)
-        return edge
     }
 
     private fun evalGetObjectValue(irExpr: IrGetObjectValue): SSAValue {

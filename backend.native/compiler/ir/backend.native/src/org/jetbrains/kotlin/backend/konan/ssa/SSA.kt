@@ -64,9 +64,9 @@ sealed class SSABlockId {
                 "entry"
     }
 
-    class Simple(private val id: Int, val name: String = "") : SSABlockId() {
+    class Simple(val name: String = "") : SSABlockId() {
         override fun toString(): String =
-            if (name.isEmpty()) "$id" else "${id}_$name"
+                name
     }
 
     object LandingPad : SSABlockId() {
@@ -77,15 +77,21 @@ sealed class SSABlockId {
 
 class SSAEdge(
         val from: SSABlock,
-        val to: SSABlock,
+        var to: SSABlock,
         val args: MutableList<SSAValue> = mutableListOf()
 ): SSAValue {
+
+    init {
+        from.succs += this
+        to.preds += this
+    }
+
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 
     override val type: SSAType = SpecialType
 }
 
-class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
+class SSABlock(val func: SSAFunction, val id: SSABlockId = SSABlockId.Simple()): SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
 
@@ -96,6 +102,12 @@ class SSABlock(val func: SSAFunction, val id: SSABlockId): SSAValue {
     val succs = mutableSetOf<SSAEdge>()
     val preds = mutableSetOf<SSAEdge>()
     var sealed: Boolean = false
+
+    fun replaceWith(newBlock: SSABlock) {
+        for (pred in preds) {
+            pred.to = newBlock
+        }
+    }
 }
 
 fun SSAInstruction.isTerminal() = when(this) {
