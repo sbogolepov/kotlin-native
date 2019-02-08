@@ -1,62 +1,45 @@
 package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.get
-import kotlinx.cinterop.memScoped
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.llvm.addFunctionSignext
+import org.jetbrains.kotlin.backend.konan.llvm.Runtime
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
-    private val typeMapper = LLVMTypeMapper()
-
     private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!
+    private val target = context.config.target
+    val runtimeFile = context.config.distribution.runtime(target)
+    val runtime = Runtime(runtimeFile) // TODO: dispose
 
-    private val codegen = LLVMCodeGenerator(context)
+    private val typeMapper = LLVMTypeMapper(runtime)
 
-    private fun SSAType.map() = typeMapper.map(this)
+    private val llvmDeclarations = LLVMDeclarationsBuilder(ssaModule, llvmModule, typeMapper).build()
 
     fun generate(): LLVMModuleRef {
-        for (importedFn in ssaModule.imports) {
-            emitFunctionImport(importedFn)
-        }
+        LLVMSetDataLayout(llvmModule, runtime.dataLayout)
+        LLVMSetTarget(llvmModule, runtime.target)
 
         for (function in ssaModule.functions) {
-            val llvmFn = TODO()
-            LLVMFunctionFromSSA(function, llvmFn, typeMapper, codegen)
+            LLVMFunctionFromSSA(context, function, llvmDeclarations, typeMapper).generate()
         }
         return llvmModule
     }
-
-    private fun emitFunctionImport(func: SSAFunction): LLVMValueRef {
-        val type: LLVMTypeRef = func.type.map()
-        val llvmFunc = LLVMAddFunction(llvmModule, func.name, type)!!
-        return memScoped {
-            val paramCount = LLVMCountParamTypes(type)
-            val paramTypes = allocArray<LLVMTypeRefVar>(paramCount)
-            LLVMGetParamTypes(type, paramTypes)
-            (0 until paramCount).forEach { index ->
-                val paramType = paramTypes[index]
-                addFunctionSignext(llvmFunc, index + 1, paramType)
-            }
-            val returnType = LLVMGetReturnType(type)
-            addFunctionSignext(llvmFunc, 0, returnType)
-            llvmFunc
-        }
-    }
 }
 
-
-
 private class LLVMFunctionFromSSA(
+        val context: Context,
         val ssaFunc: SSAFunction,
-        val llvmFunc: LLVMValueRef,
-        val typeMapper: LLVMTypeMapper,
-        val codegen: LLVMCodeGenerator
+        val llvmDeclarations: LLVMDeclarations,
+        val typeMapper: LLVMTypeMapper
 ) {
+
+    private val llvmFunc = llvmDeclarations.functions.getValue(ssaFunc)
+
+    private val paramIndex = ssaFunc.params.mapIndexed { index, argument -> argument to index }.toMap()
+
+    private val codegen = LLVMCodeGenerator(context, llvmFunc)
 
     private fun SSAType.map() = typeMapper.map(this)
 
@@ -91,35 +74,38 @@ private class LLVMFunctionFromSSA(
     private fun emitValue(value: SSAValue): LLVMValueRef = when (value) {
         is SSAConstant -> emitConstant(value)
         is SSAInstruction -> emitInstruction(value)
+        is SSAFuncArgument -> emitFuncArgument(value)
         else -> error("Unsupported value type $value")
     }
 
-    private fun emitConstant(value: SSAConstant): LLVMValueRef {
-        return when (value) {
-            SSAConstant.Undef -> TODO()
-            SSAConstant.Null -> codegen.kNullObjHeaderPtr
-            is SSAConstant.Bool -> when (value.value) {
-                true -> LLVMConstInt(LLVMInt1Type(), 1, 1)!!
-                false -> LLVMConstInt(LLVMInt1Type(), 0, 1)!!
-            }
-            is SSAConstant.Byte -> LLVMConstInt(LLVMInt8Type(), value.value.toLong(), 1)!!
-            is SSAConstant.Char -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 0)!!
-            is SSAConstant.Short -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 1)!!
-            is SSAConstant.Int -> LLVMConstInt(LLVMInt32Type(), value.value.toLong(), 1)!!
-            is SSAConstant.Long -> LLVMConstInt(LLVMInt64Type(), value.value, 1)!!
-            is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
-            is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
-            is SSAConstant.String -> TODO()
+    private fun emitFuncArgument(value: SSAFuncArgument): LLVMValueRef =
+            codegen.getParam(paramIndex.getValue(value))
+
+    private fun emitConstant(value: SSAConstant): LLVMValueRef = when (value) {
+        SSAConstant.Undef -> TODO()
+        SSAConstant.Null -> codegen.kNullObjHeaderPtr
+        is SSAConstant.Bool -> when (value.value) {
+            true -> LLVMConstInt(LLVMInt1Type(), 1, 1)!!
+            false -> LLVMConstInt(LLVMInt1Type(), 0, 1)!!
         }
+        is SSAConstant.Byte -> LLVMConstInt(LLVMInt8Type(), value.value.toLong(), 1)!!
+        is SSAConstant.Char -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 0)!!
+        is SSAConstant.Short -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 1)!!
+        is SSAConstant.Int -> LLVMConstInt(LLVMInt32Type(), value.value.toLong(), 1)!!
+        is SSAConstant.Long -> LLVMConstInt(LLVMInt64Type(), value.value, 1)!!
+        is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
+        is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
+        is SSAConstant.String -> TODO()
     }
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
         is SSACall -> emitCall(insn)
+        is SSAInvoke -> emitInvoke(insn)
         is SSAReturn -> emitReturn(insn)
         is SSABr -> emitBr(insn)
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
-        else -> error("Unsupported insntruction: $insn")
+        else -> error("Unsupported instruction: $insn")
     }
 
     private fun emitAlloc(insn: SSAAlloc): LLVMValueRef {
@@ -148,7 +134,18 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitCall(insn: SSACall): LLVMValueRef {
-        TODO()
+        val callee = llvmDeclarations.functions.getValue(insn.callee)
+        val args = insn.operands.map { emitValue(it) }
+        return codegen.call(callee, args)
+    }
+
+    private fun emitInvoke(insn: SSAInvoke): LLVMValueRef {
+        val callee = llvmDeclarations.functions.getValue(insn.callee)
+        val args = insn.operands.map { emitValue(it) }
+        // TODO: phis
+        val thenBlock = blocksMap.getValue(insn.continuation.to)
+        val catchBlock = blocksMap.getValue(insn.exception.to)
+        return codegen.invoke(callee, args, thenBlock, catchBlock)
     }
 
     private fun mapArgsToPhis(edge: SSAEdge) {

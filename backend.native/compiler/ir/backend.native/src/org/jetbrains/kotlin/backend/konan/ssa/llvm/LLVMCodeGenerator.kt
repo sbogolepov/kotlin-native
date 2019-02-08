@@ -6,7 +6,10 @@ import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.llvm.ContextUtils
 
-internal class LLVMCodeGenerator(override val context: Context) : ContextUtils {
+internal class LLVMCodeGenerator(
+        override val context: Context,
+        private  val llvmFn: LLVMValueRef
+) : ContextUtils {
     private val builder: LLVMBuilderRef = LLVMCreateBuilder()!!
 
     fun positionAtEnd(block: LLVMBasicBlockRef) {
@@ -28,8 +31,20 @@ internal class LLVMCodeGenerator(override val context: Context) : ContextUtils {
         }
     }
 
+    fun call(callee: LLVMValueRef, args: List<LLVMValueRef>): LLVMValueRef {
+        return LLVMBuildCall(builder, callee, args.toCValues(), args.size, "")!!
+    }
+
+    fun invoke(callee: LLVMValueRef, args: List<LLVMValueRef>,
+               thenBlock: LLVMBasicBlockRef, catchBlock: LLVMBasicBlockRef): LLVMValueRef {
+        return LLVMBuildInvoke(builder, callee, args.toCValues(), args.size, thenBlock, catchBlock, "")!!
+    }
+
     fun heapAlloc(type: LLVMTypeRef): LLVMValueRef = TODO()
 
     fun condBr(condVal: LLVMValueRef, truBlock: LLVMBasicBlockRef, flsBlock: LLVMBasicBlockRef) =
             LLVMBuildCondBr(builder, condVal, truBlock, flsBlock)!!
+
+    fun getParam(paramIndex: Int): LLVMValueRef =
+            LLVMGetParam(llvmFn, paramIndex)!!
 }

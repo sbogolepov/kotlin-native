@@ -24,7 +24,7 @@ class CallsLoweringPass(val function: SSAFunction) : FunctionPass {
 
         val blocks = mutableListOf<SSABlock>()
 
-        var curBlock = SSABlock(function).apply {
+        var curBlock = SSABlock(function, block.id).apply {
             params.addAll(block.params)
         }
         block.replaceWith(curBlock)

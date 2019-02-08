@@ -2,9 +2,10 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import kotlinx.cinterop.cValuesOf
 import llvm.*
+import org.jetbrains.kotlin.backend.konan.llvm.Runtime
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
-internal class LLVMTypeMapper {
+internal class LLVMTypeMapper(val runtime: Runtime) {
 
     fun map(ssaType: SSAType): LLVMTypeRef = when (ssaType) {
         is SSAFuncType -> mapFunctionalType(ssaType)
@@ -34,6 +35,6 @@ internal class LLVMTypeMapper {
             )!!
 
     private fun mapWrapperType(ssaType: SSAWrapperType): LLVMTypeRef {
-        return TODO()
+        return runtime.objHeaderType
     }
 }
