@@ -39,10 +39,10 @@ class CallsLoweringPass : FunctionPass {
                 val excEdge = SSAEdge(curBlock, landingPad.value)
 
                 val newCallSite = when (insn) {
-                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock).apply {
+                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
                         insn.operands.drop(1).forEach { appendOperand(it) }
                     }
-                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock).apply {
+                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
                         insn.operands.forEach { appendOperand(it) }
                     }
                     else -> error("Unexpected call site type: $insn")

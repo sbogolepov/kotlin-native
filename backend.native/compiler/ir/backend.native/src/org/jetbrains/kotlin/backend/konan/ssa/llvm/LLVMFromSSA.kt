@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
+import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.Runtime
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
@@ -106,7 +107,7 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
-        is SSACall -> emitCall(insn)
+        is SSACallSite -> emitCallSite(insn)
         is SSAMethodCall -> emitMethodCall(insn)
         is SSAInvoke -> emitInvoke(insn)
         is SSAMethodInvoke -> emitMethodInvoke(insn)
@@ -116,6 +117,18 @@ private class LLVMFunctionFromSSA(
         is SSAAlloc -> emitAlloc(insn)
 //        is SSAGetObjectValue -> emitGetObjectValue()
         else -> error("Unsupported instruction: $insn")
+    }
+
+    private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {
+        if (callSite.irOrigin.symbol.owner.isTypedIntrinsic) {
+            return TODO("process intrinsics")
+        }
+        return when (callSite) {
+            is SSACall -> emitCall(callSite)
+            is SSAInvoke -> emitInvoke(callSite)
+            is SSAMethodCall -> emitMethodCall(callSite)
+            is SSAMethodInvoke -> emitMethodInvoke(callSite)
+        }
     }
 
 //    private fun emitGetObjectValue(): LLVMValueRef {

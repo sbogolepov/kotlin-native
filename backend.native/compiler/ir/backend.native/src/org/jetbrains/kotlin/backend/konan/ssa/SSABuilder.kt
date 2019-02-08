@@ -488,12 +488,12 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
         if (irCall.dispatchReceiver != null) {
             val receiver = args[0]
-            return +SSAMethodCall(receiver, callee, curBlock).apply {
+            return +SSAMethodCall(receiver, callee, curBlock, irCall).apply {
                 args.drop(1).forEach { appendOperand(it) }
             }
         }
 
-        return +SSACall(callee, curBlock).apply {
+        return +SSACall(callee, curBlock, irCall).apply {
             args.forEach { appendOperand(it) }
         }
     }
@@ -510,7 +510,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         }
 
         val callee = declMapper.mapFunction(constructor)
-        +SSAMethodCall(allocationSite, callee, curBlock).apply {
+        +SSAMethodCall(allocationSite, callee, curBlock, irCall).apply {
             args.forEach { appendOperand(it) }
         }
 

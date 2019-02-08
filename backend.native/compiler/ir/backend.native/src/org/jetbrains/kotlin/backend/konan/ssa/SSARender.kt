@@ -86,7 +86,6 @@ class SSARender {
             is SSACall, is SSAMethodCall -> "%$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
             is SSAInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
             is SSAMethodInvoke -> "invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
-            else -> error("Unknown callSite type: $insn")
         })
     }
 

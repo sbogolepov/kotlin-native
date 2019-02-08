@@ -1,5 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.ir.expressions.IrCall
+
 interface SSAInstruction: SSAValue {
     val owner: SSABlock
     val operands: MutableList<SSAValue>
@@ -57,8 +59,9 @@ interface SSAReceiverAccessor {
     val receiver: SSAValue
 }
 
-interface SSACallSite : SSAInstruction {
-    val callee: SSAFunction
+sealed class SSACallSite(operands: MutableList<SSAValue> = mutableListOf()) : SSAInstructionBase(operands) {
+    abstract val callee: SSAFunction
+    abstract val irOrigin: IrCall
 
     override val type: SSAType
         get() = callee.type.returnType
@@ -66,29 +69,33 @@ interface SSACallSite : SSAInstruction {
 
 class SSACall(
         override val callee: SSAFunction,
-        override val owner: SSABlock
-) : SSAInstructionBase(), SSACallSite
+        override val owner: SSABlock,
+        override val irOrigin: IrCall
+) : SSACallSite()
 
 class SSAMethodCall(
         override val receiver: SSAValue,
         override val callee: SSAFunction,
-        override val owner: SSABlock
-) : SSAInstructionBase(mutableListOf(receiver)), SSACallSite, SSAReceiverAccessor
+        override val owner: SSABlock,
+        override val irOrigin: IrCall
+) : SSACallSite(mutableListOf(receiver)), SSAReceiverAccessor
 
 class SSAInvoke(
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
-        override val owner: SSABlock
-) : SSAInstructionBase(), SSACallSite
+        override val owner: SSABlock,
+        override val irOrigin: IrCall
+) : SSACallSite()
 
 class SSAMethodInvoke(
         override val receiver: SSAValue,
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
-        override val owner: SSABlock
-): SSAInstructionBase(mutableListOf(receiver)), SSACallSite, SSAReceiverAccessor
+        override val owner: SSABlock,
+        override val irOrigin: IrCall
+): SSACallSite(mutableListOf(receiver)), SSAReceiverAccessor
 
 class SSABr(val edge: SSAEdge, override val owner: SSABlock) : SSAInstructionBase(mutableListOf(edge)) {
     override val type: SSAType = VoidType
