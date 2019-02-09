@@ -11,7 +11,7 @@ internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule)
 
     private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!
     private val target = context.config.target
-    val runtimeFile = context.config.distribution.runtime(target)
+    private val runtimeFile = context.config.distribution.runtime(target)
     val runtime = Runtime(runtimeFile)
 
     private val typeMapper = LLVMTypeMapper(runtime)
@@ -42,6 +42,10 @@ private class LLVMFunctionFromSSA(
 
     private val codegen = LLVMCodeGenerator(context, llvmFunc)
 
+    private val intrinsicGenerator = IntrinsicGenerator(object : IntrinsicGeneratorEnvironment {
+        override val codegen = this@LLVMFunctionFromSSA.codegen
+    })
+
     private fun SSAType.map() = typeMapper.map(this)
 
     val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
@@ -52,9 +56,8 @@ private class LLVMFunctionFromSSA(
             val bb = LLVMAppendBasicBlock(llvmFunc, block.id.toString())!!
             blocksMap[block] = bb
             codegen.positionAtEnd(bb)
-            for (param in block.params) {
-                val phi = codegen.phi(param.type.map())
-                blockParamToPhi[param] = phi
+            block.params.forEach {
+                blockParamToPhi[it] = codegen.phi(it.type.map())
             }
         }
         for (block in ssaFunc.blocks) {
@@ -84,7 +87,7 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitBlockParam(value: SSABlockParam): LLVMValueRef =
-        blockParamToPhi.getValue(value)
+            blockParamToPhi.getValue(value)
 
     private fun emitFuncArgument(value: SSAFuncArgument): LLVMValueRef =
             codegen.getParam(paramIndex.getValue(value))
@@ -108,32 +111,23 @@ private class LLVMFunctionFromSSA(
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
         is SSACallSite -> emitCallSite(insn)
-        is SSAMethodCall -> emitMethodCall(insn)
-        is SSAInvoke -> emitInvoke(insn)
-        is SSAMethodInvoke -> emitMethodInvoke(insn)
         is SSAReturn -> emitReturn(insn)
         is SSABr -> emitBr(insn)
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
-//        is SSAGetObjectValue -> emitGetObjectValue()
         else -> error("Unsupported instruction: $insn")
     }
 
-    private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {
-        if (callSite.irOrigin.symbol.owner.isTypedIntrinsic) {
-            return TODO("process intrinsics")
-        }
-        return when (callSite) {
-            is SSACall -> emitCall(callSite)
-            is SSAInvoke -> emitInvoke(callSite)
-            is SSAMethodCall -> emitMethodCall(callSite)
-            is SSAMethodInvoke -> emitMethodInvoke(callSite)
-        }
-    }
-
-//    private fun emitGetObjectValue(): LLVMValueRef {
-//
-//    }
+    private fun emitCallSite(callSite: SSACallSite): LLVMValueRef =
+            if (callSite.irOrigin.symbol.owner.isTypedIntrinsic) {
+                val args = callSite.operands.map { emitValue(it) }
+                intrinsicGenerator.evaluateCall(callSite, args)
+            } else when (callSite) {
+                is SSACall -> emitCall(callSite)
+                is SSAInvoke -> emitInvoke(callSite)
+                is SSAMethodCall -> emitMethodCall(callSite)
+                is SSAMethodInvoke -> emitMethodInvoke(callSite)
+            }
 
     private fun emitAlloc(insn: SSAAlloc): LLVMValueRef {
         return codegen.heapAlloc(insn.type.map())

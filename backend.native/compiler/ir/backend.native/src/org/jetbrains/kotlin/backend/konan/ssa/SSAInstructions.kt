@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
 
+
 interface SSAInstruction: SSAValue {
     val owner: SSABlock
     val operands: MutableList<SSAValue>
@@ -40,6 +41,10 @@ abstract class SSAInstructionBase(
     fun appendOperand(operand: SSAValue) {
         operands += operand
         operand.users += this
+    }
+
+    fun appendOperands(operands: List<SSAValue>) {
+        operands.forEach { appendOperand(it) }
     }
 }
 

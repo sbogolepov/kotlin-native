@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes
 
+import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.ssa.*
 
 /**
@@ -32,7 +33,7 @@ class CallsLoweringPass : FunctionPass {
         block.replaceWith(curBlock)
 
         for (insn in block.body) {
-            if (insn is SSACallSite) {
+            if (shouldBeLowered(insn)) {
                 val nextBlock = SSABlock(function)
 
                 val contEdge = SSAEdge(curBlock, nextBlock)
@@ -40,10 +41,10 @@ class CallsLoweringPass : FunctionPass {
 
                 val newCallSite = when (insn) {
                     is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
-                        insn.operands.drop(1).forEach { appendOperand(it) }
+                        appendOperands(insn.operands.drop(1))
                     }
                     is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
-                        insn.operands.forEach { appendOperand(it) }
+                        appendOperands(insn.operands)
                     }
                     else -> error("Unexpected call site type: $insn")
                 }
@@ -68,5 +69,12 @@ class CallsLoweringPass : FunctionPass {
             blocks += curBlock
         }
         return blocks
+    }
+
+    private fun shouldBeLowered(insn: SSAInstruction): Boolean {
+        if (insn is SSACallSite) {
+            return !insn.irOrigin.symbol.owner.isTypedIntrinsic
+        }
+        return false
     }
 }

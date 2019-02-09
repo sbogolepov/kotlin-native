@@ -57,18 +57,23 @@ class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper
         module.index.functions.find { it.first == func }?.let {
             return it.second
         }
+        module.index.imports.find { it.first == func }?.let {
+            return it.second
+        }
         val type = SSAFuncType(
                 typeMapper.map(func.returnType),
                 func.valueParameters.map { typeMapper.map(it.type) }
         )
         val ssaFunction = SSAFunction(getFqName(func).asString(), type, func)
         module.imports += ssaFunction
+        module.index.imports += func to ssaFunction
         return ssaFunction
     }
 }
 
 class SSAModuleIndex {
     val functions = mutableListOf<Pair<IrFunction, SSAFunction>>()
+    val imports = mutableListOf<Pair<IrFunction, SSAFunction>>()
 }
 
 // Better to transform to some sort of SymbolTable
@@ -337,7 +342,6 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
                         && (branch.condition as IrConst<*>).value as Boolean  // If condition is "true"
 
         // TODO: common exit block
-        //  if-expression
         private fun generateWhenCase(branch: IrBranch, isLast: Boolean) {
             val nextBlock = if (isLast) exitBlock else SSABlock(func, blockIdGen.next("when_cond"))
             seal(curBlock)
@@ -486,15 +490,15 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
         val callee = declMapper.mapFunction(irCall.symbol.owner)
 
-        if (irCall.dispatchReceiver != null) {
+        return if (irCall.dispatchReceiver != null) {
             val receiver = args[0]
-            return +SSAMethodCall(receiver, callee, curBlock, irCall).apply {
-                args.drop(1).forEach { appendOperand(it) }
+            +SSAMethodCall(receiver, callee, curBlock, irCall).apply {
+                appendOperands(args.drop(1))
             }
-        }
-
-        return +SSACall(callee, curBlock, irCall).apply {
-            args.forEach { appendOperand(it) }
+        } else {
+            +SSACall(callee, curBlock, irCall).apply {
+                appendOperands(args)
+            }
         }
     }
 
@@ -511,7 +515,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
         val callee = declMapper.mapFunction(constructor)
         +SSAMethodCall(allocationSite, callee, curBlock, irCall).apply {
-            args.forEach { appendOperand(it) }
+            appendOperands(args)
         }
 
         return allocationSite
