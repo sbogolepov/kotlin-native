@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes
 
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 
 /**
  * To simplify translation to LLVM we can lower `SSACall` to `SSAInvoke`.
@@ -73,7 +74,12 @@ class CallsLoweringPass : FunctionPass {
 
     private fun shouldBeLowered(insn: SSAInstruction): Boolean {
         if (insn is SSACallSite) {
-            return !insn.irOrigin.symbol.owner.isTypedIntrinsic
+            val function = insn.irOrigin.symbol.owner
+            return when {
+                function.origin == IrDeclarationOrigin.IR_BUILTINS_STUB -> false
+                function.isTypedIntrinsic -> false
+                else -> true
+            }
         }
         return false
     }

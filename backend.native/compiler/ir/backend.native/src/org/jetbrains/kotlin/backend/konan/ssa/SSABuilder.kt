@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
@@ -49,7 +50,7 @@ class SSATypeMapper {
 
 private const val DEBUG = true
 
-private fun ssaDebug(message: String) { if (DEBUG) println(message) }
+private fun debug(message: String) { if (DEBUG) println(message) }
 
 class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper) {
 
@@ -480,7 +481,6 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     private fun evalCall(irCall: IrCall): SSAValue {
-
         val function = irCall.symbol.owner
         if (function is IrConstructor) return generateConstructorCall(irCall)
 

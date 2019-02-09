@@ -2,10 +2,16 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
+import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonDescriptor
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.Runtime
+import org.jetbrains.kotlin.backend.konan.llvm.isFloatingPoint
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
+import org.jetbrains.kotlin.backend.konan.llvm.type
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.expressions.IrCall
 
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
@@ -41,6 +47,8 @@ private class LLVMFunctionFromSSA(
     private val paramIndex = ssaFunc.params.mapIndexed { index, argument -> argument to index }.toMap()
 
     private val codegen = LLVMCodeGenerator(context, llvmFunc)
+
+    val constTrue = LLVMConstInt(LLVMInt1Type(), 1, 1)!!
 
     private val intrinsicGenerator = IntrinsicGenerator(object : IntrinsicGeneratorEnvironment {
         override val codegen = this@LLVMFunctionFromSSA.codegen
@@ -96,7 +104,9 @@ private class LLVMFunctionFromSSA(
         SSAConstant.Undef -> TODO()
         SSAConstant.Null -> codegen.kNullObjHeaderPtr
         is SSAConstant.Bool -> when (value.value) {
-            true -> LLVMConstInt(LLVMInt1Type(), 1, 1)!!
+            true -> {
+                constTrue
+            }
             false -> LLVMConstInt(LLVMInt1Type(), 0, 1)!!
         }
         is SSAConstant.Byte -> LLVMConstInt(LLVMInt8Type(), value.value.toLong(), 1)!!
@@ -118,16 +128,54 @@ private class LLVMFunctionFromSSA(
         else -> error("Unsupported instruction: $insn")
     }
 
-    private fun emitCallSite(callSite: SSACallSite): LLVMValueRef =
-            if (callSite.irOrigin.symbol.owner.isTypedIntrinsic) {
+    private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {
+        val function = callSite.irOrigin.symbol.owner
+        return when {
+            function.origin == IrDeclarationOrigin.IR_BUILTINS_STUB -> {
+                val args = callSite.operands.map { emitValue(it) }
+                evaluateOperatorCall(function, args)
+            }
+            function.isTypedIntrinsic -> {
                 val args = callSite.operands.map { emitValue(it) }
                 intrinsicGenerator.evaluateCall(callSite, args)
-            } else when (callSite) {
+            }
+            else -> when (callSite) {
                 is SSACall -> emitCall(callSite)
                 is SSAInvoke -> emitInvoke(callSite)
                 is SSAMethodCall -> emitMethodCall(callSite)
                 is SSAMethodInvoke -> emitMethodInvoke(callSite)
             }
+        }
+    }
+
+    private fun evaluateOperatorCall(function: IrFunction, args: List<LLVMValueRef>): LLVMValueRef {
+        val ib = context.irModule!!.irBuiltins
+
+        with(codegen) {
+            return when {
+                function == ib.eqeqeqFun -> icmpEq(args[0], args[1])
+                function == ib.booleanNotFun -> icmpNe(args[0], constTrue)
+
+                function.isComparisonDescriptor(ib.greaterFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
+                    else icmpGt(args[0], args[1])
+                }
+                function.isComparisonDescriptor(ib.greaterOrEqualFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
+                    else icmpGe(args[0], args[1])
+                }
+                function.isComparisonDescriptor(ib.lessFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
+                    else icmpLt(args[0], args[1])
+                }
+                function.isComparisonDescriptor(ib.lessOrEqualFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
+                    else icmpLe(args[0], args[1])
+                }
+                else -> error(function.name.toString())
+            }
+        }
+    }
 
     private fun emitAlloc(insn: SSAAlloc): LLVMValueRef {
         return codegen.heapAlloc(insn.type.map())
