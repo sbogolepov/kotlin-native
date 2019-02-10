@@ -125,6 +125,7 @@ private class LLVMFunctionFromSSA(
         is SSABr -> emitBr(insn)
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
+        is SSACatch -> emitCatch(insn)
         else -> error("Unsupported instruction: $insn")
     }
 
@@ -233,6 +234,10 @@ private class LLVMFunctionFromSSA(
         val thenBlock = blocksMap.getValue(insn.continuation.to)
         val catchBlock = blocksMap.getValue(insn.exception.to)
         return codegen.invoke(callee, args, thenBlock, catchBlock)
+    }
+
+    private fun emitCatch(insn: SSACatch): LLVMValueRef {
+        TODO("Catch is not implemented")
     }
 
     private fun mapArgsToPhis(edge: SSAEdge) {

@@ -68,6 +68,7 @@ class SSARender {
         append("$pad ")
         append(when (insn) {
             is SSACallSite -> renderCallSite(insn)
+            is SSACatch ->      "catch"
             is SSAAlloc ->      "%$track: ${renderType(insn.type)} = allocate"
             is SSAGetField ->   "%$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}"
             is SSANOP ->        "%$track: ${renderType(insn.type)} = NOP \"${insn.comment}\""

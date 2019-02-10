@@ -11,7 +11,11 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 class CallsLoweringPass : FunctionPass {
 
     override fun apply(function: SSAFunction) {
-        val landingPad: Lazy<SSABlock> = lazy { SSABlock(function, SSABlockId.LandingPad) }
+        val landingPad: Lazy<SSABlock> = lazy {
+            SSABlock(function, SSABlockId.LandingPad).apply {
+                body.add(SSACatch(this))
+            }
+        }
 
         val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block ->
             body + lowerBlock(function, block, landingPad)

@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import llvm.LLVMDumpModule
 import org.jetbrains.kotlin.backend.konan.Context
+import org.jetbrains.kotlin.backend.konan.llvm.verifyModule
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
 import org.jetbrains.kotlin.backend.konan.ssa.passes.CallsLoweringPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
@@ -23,6 +23,6 @@ internal class SSADriver(val context: Context) {
         println("--- AFTER CALLS LOWERING ---")
         println(SSARender().render(ssaModule))
         val llvmFromSsa = LLVMModuleFromSSA(context, ssaModule).generate()
-        LLVMDumpModule(llvmFromSsa)
+        verifyModule(llvmFromSsa)
     }
 }

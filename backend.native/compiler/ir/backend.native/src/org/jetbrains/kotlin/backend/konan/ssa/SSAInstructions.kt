@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.llvm.voidType
 import org.jetbrains.kotlin.ir.expressions.IrCall
 
 
@@ -147,3 +148,7 @@ class SSASetField(
 }
 
 class SSAGetObjectValue(override val type: SSAType, override val owner: SSABlock) : SSAInstructionBase()
+
+class SSACatch(override val owner: SSABlock) : SSAInstructionBase() {
+    override val type: SSAType = VoidType
+}
