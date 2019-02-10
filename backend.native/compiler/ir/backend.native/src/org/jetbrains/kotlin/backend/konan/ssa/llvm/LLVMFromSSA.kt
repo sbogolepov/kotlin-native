@@ -126,7 +126,12 @@ private class LLVMFunctionFromSSA(
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
         is SSACatch -> emitCatch(insn)
-        else -> error("Unsupported instruction: $insn")
+        is SSAIncRef -> TODO()
+        is SSADecRef -> TODO()
+        is SSANOP -> TODO()
+        is SSAGetField -> TODO()
+        is SSASetField -> TODO()
+        is SSAGetObjectValue -> TODO()
     }
 
     private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {

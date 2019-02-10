@@ -1,12 +1,15 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.llvm.voidType
 import org.jetbrains.kotlin.ir.expressions.IrCall
 
+sealed class SSAInstruction(val owner: SSABlock, val operands: MutableList<SSAValue> = mutableListOf()): SSAValue {
+    override val users = mutableSetOf<SSAInstruction>()
 
-interface SSAInstruction: SSAValue {
-    val owner: SSABlock
-    val operands: MutableList<SSAValue>
+    init {
+        operands.forEach { operand ->
+            operand.users += this
+        }
+    }
 
     fun replaceBy(replacement: SSAValue) {
         replacement.users.addAll(users)
@@ -22,23 +25,6 @@ interface SSAInstruction: SSAValue {
         operands.forEach { it.users -= this }
     }
 
-    fun detach() {
-        owner.body -= this
-    }
-}
-
-abstract class SSAInstructionBase(
-        final override val operands: MutableList<SSAValue> = mutableListOf()
-) : SSAInstruction {
-
-    init {
-        operands.forEach { operand ->
-            operand.users += this
-        }
-    }
-
-    override val users = mutableSetOf<SSAInstruction>()
-
     fun appendOperand(operand: SSAValue) {
         operands += operand
         operand.users += this
@@ -49,15 +35,15 @@ abstract class SSAInstructionBase(
     }
 }
 
-class SSAIncRef(val ref: SSAValue, override val owner: SSABlock) : SSAInstructionBase() {
+class SSAIncRef(val ref: SSAValue, owner: SSABlock) : SSAInstruction(owner) {
     override val type = VoidType
 }
 
-class SSADecRef(val ref: SSAValue, override val owner: SSABlock) : SSAInstructionBase() {
+class SSADecRef(val ref: SSAValue, owner: SSABlock) : SSAInstruction(owner) {
     override val type = VoidType
 }
 
-class SSANOP(val comment: String, override val owner: SSABlock) : SSAInstructionBase() {
+class SSANOP(val comment: String, owner: SSABlock) : SSAInstruction(owner) {
     override val type: SSAType = SpecialType
 }
 
@@ -65,7 +51,7 @@ interface SSAReceiverAccessor {
     val receiver: SSAValue
 }
 
-sealed class SSACallSite(operands: MutableList<SSAValue> = mutableListOf()) : SSAInstructionBase(operands) {
+sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = mutableListOf()) : SSAInstruction(owner, operands) {
     abstract val callee: SSAFunction
     abstract val irOrigin: IrCall
 
@@ -75,35 +61,35 @@ sealed class SSACallSite(operands: MutableList<SSAValue> = mutableListOf()) : SS
 
 class SSACall(
         override val callee: SSAFunction,
-        override val owner: SSABlock,
+        owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite()
+) : SSACallSite(owner)
 
 class SSAMethodCall(
         override val receiver: SSAValue,
         override val callee: SSAFunction,
-        override val owner: SSABlock,
+        owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite(mutableListOf(receiver)), SSAReceiverAccessor
+) : SSACallSite(owner, mutableListOf(receiver)), SSAReceiverAccessor
 
 class SSAInvoke(
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
-        override val owner: SSABlock,
+        owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite()
+) : SSACallSite(owner)
 
 class SSAMethodInvoke(
         override val receiver: SSAValue,
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
-        override val owner: SSABlock,
+        owner: SSABlock,
         override val irOrigin: IrCall
-): SSACallSite(mutableListOf(receiver)), SSAReceiverAccessor
+): SSACallSite(owner, mutableListOf(receiver)), SSAReceiverAccessor
 
-class SSABr(val edge: SSAEdge, override val owner: SSABlock) : SSAInstructionBase(mutableListOf(edge)) {
+class SSABr(val edge: SSAEdge, owner: SSABlock) : SSAInstruction(owner) {
     override val type: SSAType = VoidType
 }
 
@@ -111,16 +97,16 @@ class SSACondBr(
         condition: SSAValue,
         val truEdge: SSAEdge,
         val flsEdge: SSAEdge,
-        override val owner: SSABlock
-) : SSAInstructionBase(mutableListOf(condition, truEdge, flsEdge)) {
+        owner: SSABlock
+) : SSAInstruction(owner, mutableListOf(condition, truEdge, flsEdge)) {
     override val type: SSAType = VoidType
 
     val condition: SSAValue
         get() = operands[0]
 }
 
-class SSAReturn(retVal: SSAValue?, override val owner: SSABlock
-): SSAInstructionBase(if (retVal != null) mutableListOf(retVal) else mutableListOf()) {
+class SSAReturn(retVal: SSAValue?, owner: SSABlock
+) : SSAInstruction(owner, if (retVal != null) mutableListOf(retVal) else mutableListOf()) {
     override val type: SSAType = VoidType
 
     // replaceBy may invalidate retVal so we recompute it each time
@@ -128,13 +114,13 @@ class SSAReturn(retVal: SSAValue?, override val owner: SSABlock
         get() = operands.getOrNull(0)
 }
 
-class SSAAlloc(override val type: SSAType, override val owner: SSABlock): SSAInstructionBase()
+class SSAAlloc(override val type: SSAType, owner: SSABlock) : SSAInstruction(owner)
 
 class SSAGetField(
         override val receiver: SSAValue,
         val field: SSAField,
-        override val owner: SSABlock
-): SSAInstructionBase(), SSAReceiverAccessor {
+        owner: SSABlock
+) : SSAInstruction(owner), SSAReceiverAccessor {
     override val type: SSAType = field.type
 }
 
@@ -142,13 +128,13 @@ class SSASetField(
         override val receiver: SSAValue,
         val field: SSAField,
         val value: SSAValue,
-        override val owner: SSABlock
-): SSAInstructionBase(), SSAReceiverAccessor {
+        owner: SSABlock
+) : SSAInstruction(owner), SSAReceiverAccessor {
     override val type: SSAType = VoidType
 }
 
-class SSAGetObjectValue(override val type: SSAType, override val owner: SSABlock) : SSAInstructionBase()
+class SSAGetObjectValue(override val type: SSAType, owner: SSABlock) : SSAInstruction(owner)
 
-class SSACatch(override val owner: SSABlock) : SSAInstructionBase() {
+class SSACatch(owner: SSABlock) : SSAInstruction(owner) {
     override val type: SSAType = VoidType
 }

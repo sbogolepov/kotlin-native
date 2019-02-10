@@ -21,7 +21,7 @@ class UnitReturnsLoweringPass : FunctionPass {
                     val user = insn.users.single()
                     if (user is SSAReturn) {
                         block.body -= insn
-                        user.detach()
+                        user.owner.body -= user
                         user.owner.body += SSAReturn(null, user.owner)
                     }
                 }
