@@ -15,10 +15,10 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
-    private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!
+    private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!.also { context.llvmModule = it }
     private val target = context.config.target
     private val runtimeFile = context.config.distribution.runtime(target)
-    val runtime = Runtime(runtimeFile)
+    private val runtime = Runtime(runtimeFile)
 
     private val typeMapper = LLVMTypeMapper(runtime)
 
@@ -39,8 +39,7 @@ private class LLVMFunctionFromSSA(
         val context: Context,
         val ssaFunc: SSAFunction,
         val llvmDeclarations: LLVMDeclarations,
-        val typeMapper: LLVMTypeMapper
-) {
+        val typeMapper: LLVMTypeMapper) {
 
     private val llvmFunc = llvmDeclarations.functions.getValue(ssaFunc)
 
@@ -116,7 +115,7 @@ private class LLVMFunctionFromSSA(
         is SSAConstant.Long -> LLVMConstInt(LLVMInt64Type(), value.value, 1)!!
         is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
         is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
-        is SSAConstant.String -> TODO("String constants are not implemented")
+        is SSAConstant.String -> codegen.emitStringConst(value.value)
     }
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
@@ -242,7 +241,8 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitCatch(insn: SSACatch): LLVMValueRef {
-        TODO("Catch is not implemented")
+        val exception = codegen.landingPad()
+        return codegen.resume(exception)
     }
 
     private fun mapArgsToPhis(edge: SSAEdge) {

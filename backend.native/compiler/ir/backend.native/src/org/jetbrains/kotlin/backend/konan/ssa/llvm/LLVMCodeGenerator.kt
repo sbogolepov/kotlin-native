@@ -5,13 +5,15 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.toCValues
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.llvm.ContextUtils
-import org.jetbrains.kotlin.backend.konan.llvm.type
+import org.jetbrains.kotlin.backend.konan.llvm.*
 
 internal class LLVMCodeGenerator(
         override val context: Context,
         private  val llvmFn: LLVMValueRef
 ) : ContextUtils {
+
+    val llvm = context.llvm
+
     val builder: LLVMBuilderRef = LLVMCreateBuilder()!!
 
     val intPtrType = LLVMIntPtrType(llvmTargetData)!!
@@ -167,4 +169,17 @@ internal class LLVMCodeGenerator(
 
     fun shr(arg: LLVMValueRef, amount: Int, signed: Boolean) =
             shift(if (signed) LLVMOpcode.LLVMAShr else LLVMOpcode.LLVMLShr, arg, amount)
+
+    fun emitStringConst(value: String): LLVMValueRef =
+        llvm.staticData.kotlinStringLiteral(value).llvm
+
+    fun resume(exception: LLVMValueRef): LLVMValueRef =
+            LLVMBuildResume(builder, exception)!!
+
+    fun landingPad(): LLVMValueRef {
+        val landingpadType = structType(int8TypePtr, int32Type)
+        return LLVMBuildLandingPad(builder, landingpadType, llvm.gxxPersonalityFunction, 0, "")!!.also {
+            LLVMSetCleanup(it, 1)
+        }
+    }
 }

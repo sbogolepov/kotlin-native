@@ -284,6 +284,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         }
     }
 
+    // TODO: Mark as SSADefine(name, expr)?
     private fun generateVariable(irVariable: IrVariable) {
         val value = irVariable.initializer?.let { evalExpression(it) }
                 // TODO: explain

@@ -1,15 +1,11 @@
 package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
-import kotlinx.cinterop.cValuesOf
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.descriptors.TypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.*
 import org.jetbrains.kotlin.backend.konan.reportCompilationError
 import org.jetbrains.kotlin.backend.konan.ssa.SSACallSite
-import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrConstructor
-import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.types.getClass
 import org.jetbrains.kotlin.name.Name
@@ -331,7 +327,7 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
 
             or(bitsWithPadding, preservedBits)
         }
-        llvm.LLVMBuildStore(builder, bitsToStore, bitsWithPaddingPtr)!!.setUnaligned()
+        LLVMBuildStore(builder, bitsToStore, bitsWithPaddingPtr)!!.setUnaligned()
         return codegen.theUnitInstanceRef.llvm
     }
 
@@ -345,12 +341,12 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
         assert (first.type == second.type) { "Types are different: '${llvmtype2string(first.type)}' and '${llvmtype2string(second.type)}'" }
 
         return when (val typeKind = LLVMGetTypeKind(first.type)) {
-            llvm.LLVMTypeKind.LLVMFloatTypeKind, llvm.LLVMTypeKind.LLVMDoubleTypeKind -> {
-                val numBits = llvm.LLVMSizeOfTypeInBits(codegen.llvmTargetData, first.type).toInt()
-                val integerType = llvm.LLVMIntType(numBits)!!
+            LLVMTypeKind.LLVMFloatTypeKind, LLVMTypeKind.LLVMDoubleTypeKind -> {
+                val numBits = LLVMSizeOfTypeInBits(codegen.llvmTargetData, first.type).toInt()
+                val integerType = LLVMIntType(numBits)!!
                 icmpEq(bitcast(integerType, first), bitcast(integerType, second))
             }
-            llvm.LLVMTypeKind.LLVMIntegerTypeKind, llvm.LLVMTypeKind.LLVMPointerTypeKind -> icmpEq(first, second)
+            LLVMTypeKind.LLVMIntegerTypeKind, LLVMTypeKind.LLVMPointerTypeKind -> icmpEq(first, second)
             else -> error(typeKind)
         }
     }

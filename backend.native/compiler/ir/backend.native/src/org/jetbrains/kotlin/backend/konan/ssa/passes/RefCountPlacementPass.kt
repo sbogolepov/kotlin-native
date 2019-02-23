@@ -18,7 +18,7 @@ class RefCountPlacementPass : FunctionPass {
 
     private fun analyzeCallSite(insn: SSACallSite) {
         val returnType = insn.callee.type.returnType
-        if (returnType is ReferenceType)
+//        if (returnType is ReferenceType)
     }
 
     private fun analyzeAllocationSite(insn: SSAAlloc) {

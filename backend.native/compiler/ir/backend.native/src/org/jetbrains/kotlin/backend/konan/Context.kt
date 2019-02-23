@@ -307,9 +307,9 @@ internal class Context(config: KonanConfig) : KonanBackendContext(config) {
 
     var llvmModule: LLVMModuleRef? = null
         set(module) {
-            if (field != null) {
-                throw Error("Another LLVMModule in the context.")
-            }
+//            if (field != null) {
+//                throw Error("Another LLVMModule in the context.")
+//            }
             field = module!!
 
             llvm = Llvm(this, module)

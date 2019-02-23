@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import llvm.LLVMDumpModule
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.llvm.verifyModule
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
@@ -24,5 +25,6 @@ internal class SSADriver(val context: Context) {
         println(SSARender().render(ssaModule))
         val llvmFromSsa = LLVMModuleFromSSA(context, ssaModule).generate()
         verifyModule(llvmFromSsa)
+        LLVMDumpModule(llvmFromSsa)
     }
 }

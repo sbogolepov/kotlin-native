@@ -4,6 +4,7 @@ import kotlinx.cinterop.cValuesOf
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.llvm.Runtime
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.ir.types.isUnit
 
 internal class LLVMTypeMapper(val runtime: Runtime) {
 
@@ -13,6 +14,11 @@ internal class LLVMTypeMapper(val runtime: Runtime) {
         is SSAWrapperType -> mapWrapperType(ssaType)
         VoidType -> LLVMVoidType()!!
         else -> error("Unsupported SSA type: $ssaType")
+    }
+
+    fun mapReturnType(ssaType: SSAType): LLVMTypeRef = when (ssaType) {
+        is SSAWrapperType -> if (ssaType.irType.isUnit()) LLVMVoidType()!! else map(ssaType)
+        else -> map(ssaType)
     }
 
     private fun mapPrimitiveType(ssaType: SSAPrimitiveType): LLVMTypeRef = when (ssaType) {
@@ -28,7 +34,7 @@ internal class LLVMTypeMapper(val runtime: Runtime) {
 
     private fun mapFunctionalType(ssaType: SSAFuncType): LLVMTypeRef =
             LLVMFunctionType(
-                    map(ssaType.returnType),
+                    mapReturnType(ssaType.returnType),
                     cValuesOf(*ssaType.parameterTypes.map { map(it) }.toTypedArray()),
                     ssaType.parameterTypes.size,
                     if (ssaType.isVararg) 1 else 0
