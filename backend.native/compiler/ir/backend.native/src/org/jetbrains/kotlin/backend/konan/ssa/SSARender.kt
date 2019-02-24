@@ -77,7 +77,9 @@ class SSARender {
             is SSABr ->         "br ${renderOperand(insn.edge)}"
             is SSACondBr ->     "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
             is SSASetField -> "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"
-            else -> "UNSUPPORTED"
+            is SSADeclare -> "%$track: ${renderType(insn.type)} = declare ${insn.name} ${renderOperand(insn.value)}"
+            is SSAIncRef -> TODO()
+            is SSADecRef -> TODO()
         })
     }
 

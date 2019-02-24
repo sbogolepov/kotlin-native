@@ -2,13 +2,25 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
 
-sealed class SSAInstruction(val owner: SSABlock, val operands: MutableList<SSAValue> = mutableListOf()): SSAValue {
+sealed class SSAInstruction(owner: SSABlock, val operands: MutableList<SSAValue> = mutableListOf()): SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
+
+    private var _owner: SSABlock = owner
+
+    val owner: SSABlock
+        get() = _owner
 
     init {
         operands.forEach { operand ->
             operand.users += this
         }
+    }
+
+    // doesn't remove from previous block
+    fun moveTo(newOwner: SSABlock) {
+//        _owner.body -= this
+        _owner = newOwner
+        _owner.body += this
     }
 
     fun replaceBy(replacement: SSAValue) {
@@ -33,6 +45,13 @@ sealed class SSAInstruction(val owner: SSABlock, val operands: MutableList<SSAVa
     fun appendOperands(operands: List<SSAValue>) {
         operands.forEach { appendOperand(it) }
     }
+}
+
+class SSADeclare(val name: String, value: SSAValue, owner: SSABlock) : SSAInstruction(owner, mutableListOf(value)) {
+    override val type: SSAType = value.type
+
+    val value: SSAValue
+        get() = operands[0]
 }
 
 class SSAIncRef(val ref: SSAValue, owner: SSABlock) : SSAInstruction(owner) {

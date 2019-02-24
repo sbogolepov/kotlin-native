@@ -10,6 +10,8 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
  */
 class CallsLoweringPass : FunctionPass {
 
+    override val name: String = "Call to invoke lowering"
+
     override fun apply(function: SSAFunction) {
         val landingPad: Lazy<SSABlock> = lazy {
             SSABlock(function, SSABlockId.LandingPad).apply {
@@ -24,6 +26,7 @@ class CallsLoweringPass : FunctionPass {
         function.blocks.clear()
         function.blocks += newBody
         if (landingPad.isInitialized()) {
+            landingPad.value.sealed = true
             function.blocks += landingPad.value
         }
     }
@@ -55,11 +58,11 @@ class CallsLoweringPass : FunctionPass {
                 }
                 insn.replaceBy(newCallSite)
                 curBlock.body += newCallSite
-
+                curBlock.sealed = true
                 blocks += curBlock
                 curBlock = nextBlock
             } else {
-                curBlock.body += when (insn) {
+                when (insn) {
                     is SSABr -> SSABr(insn.edge.changeSrc(curBlock), curBlock)
                     is SSACondBr -> SSACondBr(
                             insn.condition,
@@ -67,10 +70,11 @@ class CallsLoweringPass : FunctionPass {
                             insn.flsEdge.changeSrc(curBlock),
                             curBlock)
                     else -> insn
-                }
+                }.moveTo(curBlock)
             }
         }
         if (blocks.isEmpty() || blocks.last() != curBlock) {
+            curBlock.sealed = true
             blocks += curBlock
         }
         return blocks

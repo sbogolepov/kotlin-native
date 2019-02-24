@@ -3,6 +3,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes
 import org.jetbrains.kotlin.backend.konan.ssa.SSAFunction
 import org.jetbrains.kotlin.backend.konan.ssa.SSAGetObjectValue
 import org.jetbrains.kotlin.backend.konan.ssa.SSAReturn
+import org.jetbrains.kotlin.backend.konan.ssa.validateFunction
 import org.jetbrains.kotlin.ir.types.isUnit
 
 // TODO: Replace
@@ -11,6 +12,9 @@ import org.jetbrains.kotlin.ir.types.isUnit
 //  f()
 //  val x: Unit = getUnit()
 class UnitReturnsLoweringPass : FunctionPass {
+
+    override val name: String = "Unit returns lowering"
+
     override fun apply(function: SSAFunction) {
         if (!function.isUnit()) {
             return

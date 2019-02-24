@@ -4,6 +4,8 @@ import org.jetbrains.kotlin.backend.konan.ssa.*
 
 class InlineAccessorsPass : FunctionPass {
 
+    override val name: String = "Getter/setter inlining"
+
     override fun apply(function: SSAFunction) {
         for (bb in function.blocks) {
             for (insn in bb.body) {

@@ -125,12 +125,19 @@ private class LLVMFunctionFromSSA(
         is SSACondBr -> emitCondBr(insn)
         is SSAAlloc -> emitAlloc(insn)
         is SSACatch -> emitCatch(insn)
+        is SSADeclare -> emitDeclare(insn)
         is SSAIncRef -> TODO()
         is SSADecRef -> TODO()
         is SSANOP -> TODO()
         is SSAGetField -> TODO()
         is SSASetField -> TODO()
         is SSAGetObjectValue -> TODO()
+    }
+
+    // TODO: should we build alloca?
+    private fun emitDeclare(insn: SSADeclare): LLVMValueRef {
+        val initializer = emitValue(insn.value)
+        return initializer
     }
 
     private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {

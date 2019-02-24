@@ -119,6 +119,11 @@ class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple())
 }
 
 fun SSAInstruction.isTerminal() = when(this) {
-    is SSAReturn, is SSABr, is SSACondBr -> true
+    is SSAReturn,
+    is SSABr,
+    is SSACondBr,
+    is SSACatch,
+    is SSAInvoke,
+    is SSAMethodInvoke -> true
     else -> false
 }

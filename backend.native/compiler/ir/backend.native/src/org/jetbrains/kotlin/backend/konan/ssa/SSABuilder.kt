@@ -1,6 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
+import org.jetbrains.kotlin.backend.konan.irasdescriptors.allParameters
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
@@ -63,7 +63,7 @@ class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper
         }
         val type = SSAFuncType(
                 typeMapper.map(func.returnType),
-                func.valueParameters.map { typeMapper.map(it.type) }
+                func.allParameters.map { typeMapper.map(it.type) }
         )
         val ssaFunction = SSAFunction(getFqName(func).asString(), type, func)
         module.imports += ssaFunction
@@ -160,7 +160,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     // SSA construction-related
     private val construct = object {
         val currentDef = mutableMapOf<IrValueDeclaration, MutableMap<SSABlock, SSAValue>>()
-        val incompletePhis = mutableMapOf<SSABlock, MutableMap<IrValueDeclaration, SSAValue>>()
+        val incompleteParams = mutableMapOf<SSABlock, MutableMap<IrValueDeclaration, SSABlockParam>>()
 
         fun dumpTable() {
             for ((def, map) in currentDef) {
@@ -187,7 +187,8 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
             val value: SSAValue = when {
                 !block.sealed -> {
                     val param = block.addParam(typeMapper.map(variable.type))
-                    incompletePhis.getOrPut(block) { mutableMapOf() }[variable] = param
+                    debug("Add param for ${variable.name}")
+                    incompleteParams.getOrPut(block) { mutableMapOf() }[variable] = param
                     param
                 }
                 block.preds.size == 1 -> {
@@ -208,31 +209,34 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
             for (edge in param.owner.preds) {
                 edge.args.add(readVariable(edge.from, variable))
             }
-            return param //tryRemoveTrivialPhi(phi)
+            return tryRemoveTrivialParam(param)
         }
 
-        // TODO: is it valid to always replace phi with previous phi?
-//        private fun tryRemoveTrivialPhi(phi: SSAPhi): SSAValue {
+        private fun tryRemoveTrivialParam(param: SSABlockParam): SSAValue {
+                return param
+//            val index = param.owner.params.indexOf(param)
+//            val values = param.owner.preds.map { edge -> edge.args[index] }
+//
 //            var same: SSAValue? = null
 //
-//            for (op in phi.operands) {
-//                if (op === same || op === phi) {
+//            for (op in values) {
+//                if (op === same || op === param) {
 //                    continue // unique value or self reference
 //                }
 //                if (same != null) {
-//                    return phi // phi merges at least 2 values -> not trivial
+//                    return param // phi merges at least 2 values -> not trivial
 //                }
 //                same = op
 //            }
 //            if (same == null) {
 //                same = SSAConstant.Undef // phi is unreachable or in the entry block
 //            }
-//            phi.users.remove(phi)
-//            val users = phi.users
-//            phi.replaceBy(same)
-//            users.filterIsInstance<SSAPhi>().forEach { tryRemoveTrivialPhi(it) }
+//            param.users.remove(param)
+//            val users = param.users
+//            param.replaceBy(same)
+//            users.filterIsInstance<SSABlockParam>().forEach { tryRemoveTrivialParam(it) }
 //            return same
-//        }
+        }
     }
 
     private fun addBlock(name: String = ""): SSABlock {
@@ -263,6 +267,18 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
     private fun seal(block: SSABlock) {
         block.sealed = true
+        // We need to populate missing block arguments.
+        if (block !in construct.incompleteParams) return
+        val incompleteParams = construct.incompleteParams.getValue(block)
+        val incomingEdges = block.preds
+        for ((variable, param) in incompleteParams) {
+            val index = block.params.indexOf(param)
+            for (edge in incomingEdges) {
+                val arg = construct.readVariable(edge.from, variable)
+                edge.args.add(index,arg)
+            }
+        }
+        construct.incompleteParams.remove(block)
     }
 
     private fun generateBody(irBody: IrBody) = when (irBody) {
@@ -284,12 +300,12 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         }
     }
 
-    // TODO: Mark as SSADefine(name, expr)?
     private fun generateVariable(irVariable: IrVariable) {
         val value = irVariable.initializer?.let { evalExpression(it) }
                 // TODO: explain
                 ?: SSAConstant.Undef
-        construct.writeVariable(curBlock, irVariable, value)
+        val declaration = +SSADeclare(irVariable.name.identifier, value, curBlock)
+        construct.writeVariable(curBlock, irVariable, declaration)
     }
 
     private fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
