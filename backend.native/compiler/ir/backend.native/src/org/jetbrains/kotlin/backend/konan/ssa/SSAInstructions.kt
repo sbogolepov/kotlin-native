@@ -2,6 +2,9 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
 
+// Instruction interface rules:
+//  1. Named operands should be expressed as properties pointing at element at operands list
+//     since it can be changed
 sealed class SSAInstruction(owner: SSABlock, val operands: MutableList<SSAValue> = mutableListOf()): SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
 

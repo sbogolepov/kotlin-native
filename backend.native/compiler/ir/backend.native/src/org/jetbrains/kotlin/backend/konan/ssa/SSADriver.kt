@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import llvm.LLVMDumpModule
+import llvm.LLVMWriteBitcodeToFile
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.llvm.verifyModule
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
@@ -39,5 +40,6 @@ internal class SSADriver(val context: Context) {
         val llvmFromSsa = LLVMModuleFromSSA(context, ssaModule).generate()
         verifyModule(llvmFromSsa)
         LLVMDumpModule(llvmFromSsa)
+        LLVMWriteBitcodeToFile(llvmFromSsa, context.config.tempFiles.create("ssa_final.bc").absolutePath)
     }
 }

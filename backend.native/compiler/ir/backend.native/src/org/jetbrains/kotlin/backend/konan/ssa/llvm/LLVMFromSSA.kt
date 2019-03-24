@@ -2,7 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonDescriptor
+import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonFunction
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.Runtime
 import org.jetbrains.kotlin.backend.konan.llvm.isFloatingPoint
@@ -168,19 +168,19 @@ private class LLVMFunctionFromSSA(
                 function == ib.eqeqeqFun -> icmpEq(args[0], args[1])
                 function == ib.booleanNotFun -> icmpNe(args[0], constTrue)
 
-                function.isComparisonDescriptor(ib.greaterFunByOperandType) -> {
+                function.isComparisonFunction(ib.greaterFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
                     else icmpGt(args[0], args[1])
                 }
-                function.isComparisonDescriptor(ib.greaterOrEqualFunByOperandType) -> {
+                function.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
                     else icmpGe(args[0], args[1])
                 }
-                function.isComparisonDescriptor(ib.lessFunByOperandType) -> {
+                function.isComparisonFunction(ib.lessFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
                     else icmpLt(args[0], args[1])
                 }
-                function.isComparisonDescriptor(ib.lessOrEqualFunByOperandType) -> {
+                function.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
                     else icmpLe(args[0], args[1])
                 }

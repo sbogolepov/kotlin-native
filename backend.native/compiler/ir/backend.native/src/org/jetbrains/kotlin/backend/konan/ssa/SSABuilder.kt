@@ -1,9 +1,9 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.allParameters
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.constructedClass
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.isAnonymousObject
-import org.jetbrains.kotlin.backend.konan.irasdescriptors.name
+import org.jetbrains.kotlin.backend.konan.ir.allParameters
+import org.jetbrains.kotlin.backend.konan.ir.constructedClass
+import org.jetbrains.kotlin.backend.konan.ir.isAnonymousObject
+import org.jetbrains.kotlin.backend.konan.ir.name
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
