@@ -32,6 +32,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                 context.ssaModule.functions.forEach {
                     when (pass.applyChecked(it)) {
                         ValidationResult.Error -> {
+                            println(SSARender().render(it))
                             error("Error validating function ${it.name}")
                         }
                     }

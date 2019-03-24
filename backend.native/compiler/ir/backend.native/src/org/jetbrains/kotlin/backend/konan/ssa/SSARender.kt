@@ -30,7 +30,7 @@ class SSARender {
     private fun renderBlock(block: SSABlock) =
             "${block.id}${blockTracker.slot(block)}"
 
-    private fun render(func: SSAFunction): String {
+    fun render(func: SSAFunction): String {
         slotTracker.clear()
         blockTracker.clear()
         func.params.forEach {
@@ -80,6 +80,12 @@ class SSARender {
             is SSADeclare -> "%$track: ${renderType(insn.type)} = declare ${insn.name} ${renderOperand(insn.value)}"
             is SSAIncRef -> TODO()
             is SSADecRef -> TODO()
+            is SSAInstanceOf -> "%$track: ${renderType(insn.type)} = ${renderOperand(insn.value)} is ${renderType(insn.typeOperand)}"
+            is SSANot -> "%$track: ${renderType(insn.type)} = not ${renderOperand(insn.value)}"
+            is SSACast -> TODO()
+            is SSAIntegerCoercion -> TODO()
+            is SSAGetGlobal -> TODO()
+            is SSASetGlobal -> TODO()
         })
     }
 

@@ -125,12 +125,18 @@ private class LLVMFunctionFromSSA(
         is SSAAlloc -> emitAlloc(insn)
         is SSACatch -> emitCatch(insn)
         is SSADeclare -> emitDeclare(insn)
+        is SSAGetGlobal -> TODO()
+        is SSASetGlobal -> TODO()
         is SSAIncRef -> TODO()
         is SSADecRef -> TODO()
         is SSANOP -> TODO()
         is SSAGetField -> TODO()
         is SSASetField -> TODO()
         is SSAGetObjectValue -> TODO()
+        is SSAInstanceOf -> TODO()
+        is SSACast -> TODO()
+        is SSAIntegerCoercion -> TODO()
+        is SSANot -> TODO()
     }
 
     // TODO: should we build alloca?

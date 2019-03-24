@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.common.ir.ir2string
 import org.jetbrains.kotlin.backend.konan.ir.allParameters
 import org.jetbrains.kotlin.backend.konan.ir.constructedClass
 import org.jetbrains.kotlin.backend.konan.ir.isAnonymousObject
@@ -12,6 +13,7 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArguments
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 
 private fun getLocalName(parent: FqName, descriptor: IrDeclaration): Name {
     if (descriptor.isAnonymousObject) {
@@ -38,10 +40,13 @@ class SSATypeMapper {
         return if (irType.isPrimitiveType()) when {
             irType.isBoolean() -> SSAPrimitiveType.BOOL
             irType.isByte() -> SSAPrimitiveType.BYTE
+            irType.isChar() -> SSAPrimitiveType.CHAR
             irType.isShort() -> SSAPrimitiveType.SHORT
             irType.isInt() -> SSAPrimitiveType.INT
             irType.isLong() -> SSAPrimitiveType.LONG
-            else -> TODO("Unsupported primitive type: ${irType}")
+            irType.isFloat() -> SSAPrimitiveType.FLOAT
+            irType.isDouble() -> SSAPrimitiveType.DOUBLE
+            else -> TODO("Unsupported primitive type: ${irType.classifierOrNull?.descriptor?.fqNameUnsafe?.asString()}")
         } else {
             SSAWrapperType(irType)
         }
@@ -166,7 +171,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
             for ((def, map) in currentDef) {
                 println("--- ${def.name.asString()} --- $def")
                 for ((k, v) in map) {
-                    println("$k $v")
+                    println("${k.id} $v")
                 }
             }
         }
@@ -251,7 +256,14 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         irFunction.dispatchReceiverParameter?.let {
             // TODO: Reflect in owner type somehow
             val receiver = SSAReceiver(it.type.map())
-            func.receiver = receiver
+            func.dispatchReceiver = receiver
+            construct.writeVariable(func.entry, it, receiver)
+        }
+
+        irFunction.extensionReceiverParameter?.let {
+            // TODO: Reflect in owner type somehow
+            val receiver = SSAReceiver(it.type.map())
+            func.extensionReceiver = receiver
             construct.writeVariable(func.entry, it, receiver)
         }
 
@@ -309,6 +321,7 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     private fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
+        is IrTypeOperatorCall -> evalTypeOperatorCall(irExpr)
         is IrCall -> evalCall(irExpr)
         is IrDelegatingConstructorCall -> evalDelegatingConstructorCall(irExpr)
         is IrGetValue -> evalGetValue(irExpr)
@@ -321,21 +334,65 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         is IrContainerExpression -> evalContainerExpression(irExpr)
         is IrGetField -> evalGetField(irExpr)
         is IrSetField -> evalSetField(irExpr)
+        is IrTry -> evalTry(irExpr)
+        is IrThrow -> evalThrow(irExpr)
+        is IrBreak -> evalBreak(irExpr)
+        is IrVararg -> evalVararg(irExpr)
+        is IrContinue -> evalContinue(irExpr)
         else -> TODO("$irExpr")
     }
 
+    private fun evalTypeOperatorCall(irExpr: IrTypeOperatorCall): SSAValue =
+            when (irExpr.operator) {
+                IrTypeOperator.CAST                      -> evaluateCast(irExpr)
+                IrTypeOperator.IMPLICIT_INTEGER_COERCION -> evaluateIntegerCoercion(irExpr)
+                IrTypeOperator.IMPLICIT_CAST             -> evalExpression(irExpr.argument)
+                IrTypeOperator.IMPLICIT_NOTNULL          -> TODO(ir2string(irExpr))
+                IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> {
+                    evalExpression(irExpr.argument)
+                    getUnit()
+                }
+                IrTypeOperator.SAFE_CAST                 -> throw IllegalStateException("safe cast wasn't lowered")
+                IrTypeOperator.INSTANCEOF                -> evaluateInstanceOf(irExpr)
+                IrTypeOperator.NOT_INSTANCEOF            -> evaluateNotInstanceOf(irExpr)
+                IrTypeOperator.SAM_CONVERSION            -> TODO(ir2string(irExpr))
+            }
+
+    private fun evaluateCast(irExpr: IrTypeOperatorCall): SSAValue =
+            +SSACast(evalExpression(irExpr.argument), typeMapper.map(irExpr.typeOperand), curBlock)
+
+    private fun evaluateIntegerCoercion(irExpr: IrTypeOperatorCall): SSAValue =
+            +SSAIntegerCoercion(evalExpression(irExpr.argument), typeMapper.map(irExpr.typeOperand), curBlock)
+
+    private fun evaluateInstanceOf(irExpr: IrTypeOperatorCall): SSAValue =
+            +SSAInstanceOf(evalExpression(irExpr.argument), typeMapper.map(irExpr.typeOperand), curBlock)
+
+    private fun evaluateNotInstanceOf(irExpr: IrTypeOperatorCall): SSAValue {
+        val instanceOf = evaluateInstanceOf(irExpr)
+        return +SSANot(instanceOf, curBlock)
+    }
+
     private fun evalSetField(irExpr: IrSetField): SSAValue {
-        val receiver = evalExpression(irExpr.receiver!!)
         val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
-        val value = evalExpression(irExpr.value)
-        return +SSASetField(receiver, field, value, curBlock)
+        if (irExpr.receiver == null) {
+            val value = evalExpression(irExpr.value)
+            return +SSASetGlobal(field, value, curBlock)
+        } else {
+            val receiver = evalExpression(irExpr.receiver!!)
+            val value = evalExpression(irExpr.value)
+            return +SSASetField(receiver, field, value, curBlock)
+        }
     }
 
     private fun evalGetField(irExpr: IrGetField): SSAValue {
         // Static variables has no receiver
-        val receiver = evalExpression(irExpr.receiver!!)
         val field = SSAField(irExpr.symbol.owner.name.asString(), typeMapper.map(irExpr.type))
-        return +SSAGetField(receiver, field, curBlock)
+        return if (irExpr.receiver == null) {
+            +SSAGetGlobal(field, curBlock)
+        } else {
+            val receiver = evalExpression(irExpr.receiver!!)
+            +SSAGetField(receiver, field, curBlock)
+        }
     }
 
     private fun evalDelegatingConstructorCall(irCall: IrDelegatingConstructorCall): SSAValue {
@@ -536,5 +593,30 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         }
 
         return allocationSite
+    }
+
+    // TODO: incorrect.
+    private fun evalTry(irTry: IrTry): SSAValue {
+        return evalExpression(irTry.tryResult)
+    }
+
+    private fun evalThrow(irThrow: IrThrow): SSAValue {
+        val value = evalExpression(irThrow.value)
+        return SSAConstant.Undef
+    }
+
+    private fun evalBreak(irBreak: IrBreak): SSAValue {
+        return SSAConstant.Undef
+    }
+
+    private fun evalContinue(irContinue: IrContinue): SSAValue {
+        return SSAConstant.Undef
+    }
+
+    private fun evalVararg(irVararg: IrVararg): SSAValue {
+        val values = irVararg.elements.forEach {
+            if (it is IrExpression) evalExpression(it)
+        }
+        return SSAConstant.Undef
     }
 }

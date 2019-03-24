@@ -56,7 +56,8 @@ class SSAFunction(
         val type: SSAFuncType,
         val irOrigin: IrFunction? = null
 ): SSACallable {
-    var receiver: SSAReceiver? = null
+    var dispatchReceiver: SSAReceiver? = null
+    var extensionReceiver: SSAReceiver? = null
     val entry = SSABlock(this, SSABlockId.Entry)
     val blocks = mutableListOf(entry)
     val params = mutableListOf<SSAFuncArgument>()

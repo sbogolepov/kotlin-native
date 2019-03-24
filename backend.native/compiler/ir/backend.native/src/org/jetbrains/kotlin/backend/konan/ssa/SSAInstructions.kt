@@ -155,8 +155,56 @@ class SSASetField(
     override val type: SSAType = VoidType
 }
 
+class SSAGetGlobal(
+        val global: SSAField,
+        owner: SSABlock
+) : SSAInstruction(owner) {
+    override val type: SSAType = global.type
+}
+
+class SSASetGlobal(
+        val global: SSAField,
+        val value: SSAValue,
+        owner: SSABlock
+) : SSAInstruction(owner) {
+    override val type: SSAType = VoidType
+}
+
 class SSAGetObjectValue(override val type: SSAType, owner: SSABlock) : SSAInstruction(owner)
 
 class SSACatch(owner: SSABlock) : SSAInstruction(owner) {
     override val type: SSAType = VoidType
+}
+
+// TODO: how to encode type?
+class SSAInstanceOf(value: SSAValue, val typeOperand: SSAType, owner: SSABlock) :
+        SSAInstruction(owner, mutableListOf(value)) {
+    override val type: SSAType = SSAPrimitiveType.BOOL
+
+    val value: SSAValue
+        get() = operands[0]
+}
+
+class SSACast(value: SSAValue, val typeOperand: SSAType, owner: SSABlock) :
+        SSAInstruction(owner, mutableListOf(value)) {
+    override val type: SSAType = typeOperand
+
+    val value: SSAValue
+        get() = operands[0]
+}
+
+class SSAIntegerCoercion(value: SSAValue, val typeOperand: SSAType, owner: SSABlock) :
+        SSAInstruction(owner, mutableListOf(value)) {
+    override val type: SSAType = typeOperand
+
+    val value: SSAValue
+        get() = operands[0]
+}
+
+class SSANot(value: SSAValue, owner: SSABlock):
+        SSAInstruction(owner, mutableListOf(value)) {
+    override val type: SSAType = SSAPrimitiveType.BOOL
+
+    val value: SSAValue
+        get() = operands[0]
 }
