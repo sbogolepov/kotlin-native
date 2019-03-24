@@ -1,45 +1,62 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import llvm.LLVMDumpModule
-import llvm.LLVMWriteBitcodeToFile
-import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.llvm.verifyModule
+import llvm.DICreateBuilder
+import llvm.LLVMModuleCreateWithName
+import org.jetbrains.kotlin.backend.common.phaser.namedIrModulePhase
+import org.jetbrains.kotlin.backend.common.phaser.then
+import org.jetbrains.kotlin.backend.konan.llvm.createLlvmDeclarations
+import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
 import org.jetbrains.kotlin.backend.konan.ssa.passes.CallsLoweringPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.UnitReturnsLoweringPass
 
-internal class SSADriver(val context: Context) {
-
-    private val passes = listOf(
-            UnitReturnsLoweringPass(),
-            InlineAccessorsPass(),
-            CallsLoweringPass()
-    )
-
-    fun exec() {
-        val ssaModule = SSAModuleBuilder().build(context.ir.irModule)
-        if (validate(ssaModule) == ValidationResult.Error) {
-            return
+private val ssaGenerationPhase = makeKonanModuleOpPhase(
+        name = "IrToSsa",
+        description = "Generate SSA IR from HIR",
+        op = { context, irModuleFragment ->
+            context.ssaModule = SSAModuleBuilder().build(irModuleFragment)
         }
+)
 
-        println("--- BEFORE ALL PASSES ---")
-        println(SSARender().render(ssaModule))
-        for (pass in passes) {
-            println("--- ${pass.name}")
-            ssaModule.functions.forEach {
-                when (pass.applyChecked(it)) {
-                    ValidationResult.Error -> {
-                        println("Error validating function ${it.name}")
-                        return
+private val ssaLoweringPhase = makeKonanModuleOpPhase(
+        name = "SsaLowering",
+        description = "Run lowering passes over SSA IR",
+        op = { context, irModuleFragment ->
+            val passes = listOf(
+                    UnitReturnsLoweringPass(),
+                    InlineAccessorsPass(),
+                    CallsLoweringPass()
+            )
+            passes.forEach { pass ->
+                context.ssaModule.functions.forEach {
+                    when (pass.applyChecked(it)) {
+                        ValidationResult.Error -> {
+                            error("Error validating function ${it.name}")
+                        }
                     }
                 }
             }
-            println(SSARender().render(ssaModule))
         }
-        val llvmFromSsa = LLVMModuleFromSSA(context, ssaModule).generate()
-        verifyModule(llvmFromSsa)
-        LLVMDumpModule(llvmFromSsa)
-        LLVMWriteBitcodeToFile(llvmFromSsa, context.config.tempFiles.create("ssa_final.bc").absolutePath)
-    }
-}
+)
+
+private val llvmFromSsaPhase = makeKonanModuleOpPhase(
+        name = "SsaToLlvm",
+        description = "Generate LLVM IR from SSA IR",
+        op = { context, irModuleFragment ->
+            val llvmModule = LLVMModuleCreateWithName("out")!! // TODO: dispose
+            context.llvmModule = llvmModule
+            context.debugInfo.builder = DICreateBuilder(llvmModule)
+            context.llvmDeclarations = createLlvmDeclarations(context)
+            context.lifetimes = mutableMapOf()
+            LLVMModuleFromSSA(context, context.ssaModule).generate()
+        }
+)
+
+internal val ssaPhase = namedIrModulePhase(
+        name = "SSA",
+        description = "SSA",
+        lower = ssaGenerationPhase then
+                ssaLoweringPhase then
+                llvmFromSsaPhase
+)

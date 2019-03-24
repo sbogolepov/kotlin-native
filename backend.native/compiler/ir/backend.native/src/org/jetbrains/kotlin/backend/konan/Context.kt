@@ -50,6 +50,7 @@ import org.jetbrains.kotlin.backend.konan.llvm.coverage.CoverageManager
 import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.ir.descriptors.WrappedTypeParameterDescriptor
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
 import org.jetbrains.kotlin.ir.symbols.impl.IrTypeParameterSymbolImpl
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.konan.library.KonanLibraryLayout
@@ -478,6 +479,9 @@ internal class Context(config: KonanConfig) : KonanBackendContext(config) {
     )
 
     val declaredLocalArrays: MutableMap<String, LLVMTypeRef> = HashMap()
+    lateinit var linkStage: LinkStage
+
+    lateinit var ssaModule: SSAModule
 }
 
 private fun MemberScope.getContributedClassifier(name: String) =

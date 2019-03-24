@@ -15,7 +15,7 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
-    private val llvmModule = LLVMModuleCreateWithName(ssaModule.name)!!.also { context.llvmModule = it }
+    private val llvmModule = context.llvmModule!!
     private val target = context.config.target
     private val runtimeFile = context.config.distribution.runtime(target)
     private val runtime = Runtime(runtimeFile)
@@ -24,14 +24,13 @@ internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule)
 
     private val llvmDeclarations = LLVMDeclarationsBuilder(ssaModule, llvmModule, typeMapper).build()
 
-    fun generate(): LLVMModuleRef {
+    fun generate() {
         LLVMSetDataLayout(llvmModule, runtime.dataLayout)
         LLVMSetTarget(llvmModule, runtime.target)
 
         for (function in ssaModule.functions) {
             LLVMFunctionFromSSA(context, function, llvmDeclarations, typeMapper).generate()
         }
-        return llvmModule
     }
 }
 
