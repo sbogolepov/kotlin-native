@@ -125,6 +125,7 @@ fun SSAInstruction.isTerminal() = when(this) {
     is SSABr,
     is SSACondBr,
     is SSACatch,
+    is SSAThrow,
     is SSAInvoke,
     is SSAMethodInvoke -> true
     else -> false

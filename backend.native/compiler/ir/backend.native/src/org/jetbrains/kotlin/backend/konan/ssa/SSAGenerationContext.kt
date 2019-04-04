@@ -5,6 +5,32 @@ import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.expressions.IrTry
 
+interface SSAFunctionBuilder {
+
+    var generationContext: GenerationContext
+
+    var curBlock: SSABlock
+
+    fun addBr(to: SSABlock): SSABr
+
+    fun addBlock(name: String): SSABlock
+
+    fun addBlock(id: SSABlockId): SSABlock
+
+    fun <T: SSAInstruction> T.add(): T
+}
+
+
+interface LoopContext {
+    fun emitBreak(irBreak: IrBreak)
+
+    fun emitContinue(irContinue: IrContinue)
+}
+
+interface TryCatchContext {
+    fun emitThrow(value: SSAValue)
+}
+
 sealed class GenerationContext(
         val builder: SSAFunctionBuilder,
         val parent: GenerationContext?
@@ -13,13 +39,13 @@ sealed class GenerationContext(
             builder: SSAFunctionBuilder,
             parent: GenerationContext?,
             val loop: IrLoop
-    ) : GenerationContext(builder, parent) {
+    ) : GenerationContext(builder, parent), LoopContext {
 
         val loopEntry = builder.addBlock("loop_entry")
 
         val loopExit = builder.addBlock("loop_exit")
 
-        fun emitBreak(irBreak: IrBreak) {
+        override fun emitBreak(irBreak: IrBreak) {
             if (irBreak.loop == loop) {
                 builder.addBr(loopExit)
             } else {
@@ -27,7 +53,7 @@ sealed class GenerationContext(
             }
         }
 
-        fun emitContinue(irContinue: IrContinue) {
+        override fun emitContinue(irContinue: IrContinue) {
             if (irContinue.loop == loop) {
                 builder.addBr(loopEntry)
             } else {
@@ -40,16 +66,27 @@ sealed class GenerationContext(
             builder: SSAFunctionBuilder,
             parent: GenerationContext?,
             val irTry: IrTry
-    ) : GenerationContext(builder, parent) {
-        fun emitThrow(value: SSAValue) {
-
+    ) : GenerationContext(builder, parent), TryCatchContext {
+        override fun emitThrow(value: SSAValue) {
         }
     }
 
     class Function(
             builder: SSAFunctionBuilder,
             parent: GenerationContext?
-    ) : GenerationContext(builder, parent)
+    ) : GenerationContext(builder, parent), TryCatchContext {
+
+        private val landingPad: SSABlock by lazy {
+            builder.addBlock(SSABlockId.LandingPad)
+        }
+
+        override fun emitThrow(value: SSAValue) {
+            with(builder) {
+                val edge = SSAEdge(builder.curBlock, landingPad, mutableListOf(value))
+                SSAThrow(edge, builder.curBlock).add()
+            }
+        }
+    }
 }
 
 fun GenerationContext.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -> Unit) {
@@ -74,14 +111,14 @@ inline fun <T> GenerationContext.inTryCatch(irTry: IrTry, action: GenerationCont
     }
 }
 
-fun GenerationContext?.getLoop(): GenerationContext.Loop = when (this) {
-    is GenerationContext.Loop -> this
+fun GenerationContext?.getLoop(): LoopContext = when (this) {
+    is LoopContext -> this
     null -> error("Cannot find parent loop")
     else -> parent.getLoop()
 }
 
-fun GenerationContext?.getTryCatch(): GenerationContext.TryCatch = when (this) {
-    is GenerationContext.TryCatch -> this
+fun GenerationContext?.getTryCatch(): TryCatchContext = when (this) {
+    is TryCatchContext -> this
     null -> error("Cannot find parent try-catch")
     else -> parent.getTryCatch()
 }

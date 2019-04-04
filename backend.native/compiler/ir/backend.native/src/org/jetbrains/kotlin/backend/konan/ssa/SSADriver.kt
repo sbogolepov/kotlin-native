@@ -16,6 +16,7 @@ private val ssaGenerationPhase = makeKonanModuleOpPhase(
         description = "Generate SSA IR from HIR",
         op = { context, irModuleFragment ->
             context.ssaModule = SSAModuleBuilder().build(irModuleFragment)
+            println(SSARender().render(context.ssaModule))
         }
 )
 

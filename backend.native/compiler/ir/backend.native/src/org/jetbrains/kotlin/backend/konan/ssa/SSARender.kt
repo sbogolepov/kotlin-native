@@ -82,10 +82,11 @@ class SSARender {
             is SSADecRef -> TODO()
             is SSAInstanceOf -> "%$track: ${renderType(insn.type)} = ${renderOperand(insn.value)} is ${renderType(insn.typeOperand)}"
             is SSANot -> "%$track: ${renderType(insn.type)} = not ${renderOperand(insn.value)}"
-            is SSACast -> TODO()
-            is SSAIntegerCoercion -> TODO()
-            is SSAGetGlobal -> TODO()
-            is SSASetGlobal -> TODO()
+            is SSACast -> "%$track: ${renderType(insn.type)} = cast ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
+            is SSAIntegerCoercion -> "%$track: ${renderType(insn.type)} = coerce ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
+            is SSAGetGlobal -> "%$track: ${renderType(insn.type)} = get global ${renderOperand(insn.global)}"
+            is SSASetGlobal -> "set global ${renderOperand(insn.global)} to ${renderOperand(insn.value)}"
+            is SSAThrow -> "throw ${renderOperand(insn.edge)}"
         })
     }
 

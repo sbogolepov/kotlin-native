@@ -14,6 +14,8 @@ class CallsLoweringPass : FunctionPass {
 
     override fun apply(function: SSAFunction) {
         val landingPad: Lazy<SSABlock> = lazy {
+            function.blocks.find { it.id == SSABlockId.LandingPad }
+                    ?:
             SSABlock(function, SSABlockId.LandingPad).apply {
                 body.add(SSACatch(this))
             }

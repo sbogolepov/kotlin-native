@@ -208,3 +208,11 @@ class SSANot(value: SSAValue, owner: SSABlock):
     val value: SSAValue
         get() = operands[0]
 }
+
+class SSAThrow(exception: SSAEdge, owner: SSABlock):
+        SSAInstruction(owner, mutableListOf(exception)) {
+    override val type: SSAType = exception.type
+
+    val edge: SSAEdge
+        get() = operands[0] as SSAEdge
+}

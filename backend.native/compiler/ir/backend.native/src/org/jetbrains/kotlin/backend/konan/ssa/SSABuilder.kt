@@ -26,15 +26,6 @@ class SSABlockIdGenerator {
     }
 }
 
-interface SSAFunctionBuilder {
-
-    var generationContext: GenerationContext
-
-    fun addBr(to: SSABlock): SSABr
-
-    fun addBlock(name: String): SSABlock
-}
-
 // TODO: Pass context about class here?
 class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
 
@@ -48,7 +39,7 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
     var blockIdGen = SSABlockIdGenerator()
 
 
-    var curBlock = func.entry
+    override var curBlock = func.entry
 
     private fun SSABlock.addParam(type: SSAType): SSABlockParam =
             SSABlockParam(type, this).also { this.params.add(it) }
@@ -83,7 +74,7 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
             val value: SSAValue = when {
                 !block.sealed -> {
                     val param = block.addParam(typeMapper.map(variable.type))
-                    debug("Add param for ${variable.name}")
+//                    debug("Add param for ${variable.name}")
                     incompleteParams.getOrPut(block) { mutableMapOf() }[variable] = param
                     param
                 }
@@ -136,7 +127,10 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
     }
 
     override fun addBlock(name: String): SSABlock =
-            SSABlock(func, blockIdGen.next(name)).add()
+            addBlock(blockIdGen.next(name))
+
+    override fun addBlock(id: SSABlockId): SSABlock =
+            SSABlock(func, id).add()
 
     private fun IrType.map() = typeMapper.map(this)
 
@@ -435,7 +429,7 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
 
     private operator fun <T: SSAInstruction> T.unaryPlus(): T = this.add()
 
-    private fun <T: SSAInstruction> T.add(): T {
+    override fun <T: SSAInstruction> T.add(): T {
         curBlock.body += this
         return this
     }
