@@ -116,7 +116,7 @@ class SSAModuleBuilder {
         val index = createIndex(irModule)
         val module = SSAModule(irModule.name.asString(), index)
         for ((ir, ssa) in index.functions) {
-            module.functions += SSAFunctionBuilder(ssa, module).build(ir)
+            module.functions += SSAFunctionBuilderImpl(ssa, module).build(ir)
         }
         return module
     }
@@ -147,8 +147,20 @@ class SSABlockIdGenerator {
     }
 }
 
+interface SSAFunctionBuilder {
+
+    var generationContext: GenerationContext
+
+    fun addBr(to: SSABlock): SSABr
+
+    fun addBlock(name: String): SSABlock
+}
+
 // TODO: Pass context about class here?
-class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
+class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
+
+    override var generationContext: GenerationContext =
+            GenerationContext.Function(this, null)
 
     private val typeMapper = SSATypeMapper()
 
@@ -244,9 +256,8 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
         }
     }
 
-    private fun addBlock(name: String = ""): SSABlock {
-        return SSABlock(func, blockIdGen.next(name)).add()
-    }
+    override fun addBlock(name: String): SSABlock =
+            SSABlock(func, blockIdGen.next(name)).add()
 
     private fun IrType.map() = typeMapper.map(this)
 
@@ -478,29 +489,30 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
     }
 
     private fun evalWhileLoop(irLoop: IrWhileLoop): SSAValue {
-        val loopHeader = addBlock("loop_header")
-        val loopBody = addBlock("loop_body")
-        val loopExit = addBlock("loop_exit")
 
-        addBr(loopHeader)
+        generationContext.inLoop(irLoop) {
+            val loopBody = addBlock("loop_body")
 
-        curBlock = loopHeader
-        val condition = evalExpression(irLoop.condition)
-        addCondBr(condition, loopBody, loopExit)
+            addBr(loopEntry)
 
-        curBlock = loopBody
-        seal(loopBody)
-        irLoop.body?.let { generateStatement(it) }
-        addBr(loopHeader)
-        seal(loopHeader)
+            curBlock = loopEntry
+            val condition = evalExpression(irLoop.condition)
+            addCondBr(condition, loopBody, loopExit)
 
-        curBlock = loopExit
-        seal(loopExit)
+            curBlock = loopBody
+            seal(loopBody)
+            irLoop.body?.let { generateStatement(it) }
+            addBr(loopEntry)
+            seal(loopEntry)
+
+            curBlock = loopExit
+            seal(loopExit)
+        }
 
         return getUnit()
     }
 
-    fun addBr(to: SSABlock): SSABr =
+    override fun addBr(to: SSABlock): SSABr =
         +SSABr(SSAEdge(curBlock, to), curBlock)
 
     fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
@@ -602,14 +614,17 @@ class SSAFunctionBuilder(val func: SSAFunction, val module: SSAModule) {
 
     private fun evalThrow(irThrow: IrThrow): SSAValue {
         val value = evalExpression(irThrow.value)
+        generationContext.getTryCatch().emitThrow(value)
         return SSAConstant.Undef
     }
 
     private fun evalBreak(irBreak: IrBreak): SSAValue {
+        generationContext.getLoop().emitBreak(irBreak)
         return SSAConstant.Undef
     }
 
     private fun evalContinue(irContinue: IrContinue): SSAValue {
+        generationContext.getLoop().emitContinue(irContinue)
         return SSAConstant.Undef
     }
 

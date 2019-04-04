@@ -7,6 +7,9 @@ import org.jetbrains.kotlin.backend.konan.ssa.validateFunction
 interface FunctionPass {
     val name: String
 
+    val description: String
+        get() = ""
+
     fun apply(function: SSAFunction)
 
     fun applyChecked(function: SSAFunction): ValidationResult {
