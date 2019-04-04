@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.backend.konan.ssa
 import org.jetbrains.kotlin.ir.expressions.IrBreak
 import org.jetbrains.kotlin.ir.expressions.IrContinue
 import org.jetbrains.kotlin.ir.expressions.IrLoop
-import kotlin.reflect.KClass
+import org.jetbrains.kotlin.ir.expressions.IrTry
 
 sealed class GenerationContext(
         val builder: SSAFunctionBuilder,
@@ -38,7 +38,8 @@ sealed class GenerationContext(
 
     class TryCatch(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?
+            parent: GenerationContext?,
+            val irTry: IrTry
     ) : GenerationContext(builder, parent) {
         fun emitThrow(value: SSAValue) {
 
@@ -57,6 +58,17 @@ fun GenerationContext.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -
     builder.generationContext = loop
     try {
         loop.action()
+    } finally {
+        builder.generationContext = old
+    }
+}
+
+inline fun <T> GenerationContext.inTryCatch(irTry: IrTry, action: GenerationContext.TryCatch.() -> T): T {
+    val loop = GenerationContext.TryCatch(builder, this, irTry)
+    val old = builder.generationContext
+    builder.generationContext = loop
+    try {
+        return loop.action()
     } finally {
         builder.generationContext = old
     }
