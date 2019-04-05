@@ -38,6 +38,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                         }
                     }
                 }
+                println("${pass.name} completed.")
             }
         }
 )

@@ -85,6 +85,9 @@ sealed class GenerationContext<T>(
         }
 
         override fun complete(result: Unit): SSAValue {
+            if (builder.curBlock.body.isEmpty() || !builder.curBlock.body.last().isTerminal()) {
+                builder.addBr(continuation)
+            }
             builder.curBlock = continuation
             builder.seal(continuation)
             return returnValue

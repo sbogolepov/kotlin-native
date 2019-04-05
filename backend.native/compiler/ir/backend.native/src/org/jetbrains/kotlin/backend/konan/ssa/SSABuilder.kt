@@ -399,7 +399,7 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
     override fun <T : SSAInstruction> T.add(): T {
         if (curBlock.body.lastOrNull()?.isTerminal() == true) {
             curBlock = createBlock("unreachable").apply {
-                addBlock(this)
+//                addBlock(this)
                 sealed = true
             }
         }
