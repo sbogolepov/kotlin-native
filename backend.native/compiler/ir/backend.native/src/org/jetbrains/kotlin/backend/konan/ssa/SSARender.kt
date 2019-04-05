@@ -88,6 +88,9 @@ class SSARender {
             is SSASetGlobal -> "set global ${renderOperand(insn.global)} to ${renderOperand(insn.value)}"
             is SSAThrow -> "throw ${renderOperand(insn.edge)}"
         })
+        insn.comment?.let {
+            append("\t\t #$it")
+        }
     }
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {

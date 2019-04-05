@@ -25,14 +25,18 @@ fun validateFunction(fn: SSAFunction): ValidationResult {
             println("block ${it.id} is not ending with terminal instruction")
             hasError = true
         }
-        for (insn in it.body) {
+        it.body.forEachIndexed { index, insn ->
+            if (insn.isTerminal() && index != it.body.lastIndex) {
+                println("$insn is a terminal but it is not the last insn in block.")
+                hasError = true
+            }
             for (operand in insn.operands) {
                 if (insn !in operand.users) {
                     println("$insn is not a user of it's operand $operand")
                     hasError = true
                 }
                 if (operand is SSAInstruction && operand.owner !in fn.blocks) {
-                    println("$operand: instruction's owner doesn't belong to function blocks!")
+                    println("$operand: instruction's owner doesn't belong to function blocks.")
                     hasError = true
                 }
             }

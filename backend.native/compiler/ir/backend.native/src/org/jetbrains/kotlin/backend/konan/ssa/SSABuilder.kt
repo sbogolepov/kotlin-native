@@ -1,24 +1,20 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.backend.common.ir.ir2string
-import org.jetbrains.kotlin.backend.konan.ir.allParameters
 import org.jetbrains.kotlin.backend.konan.ir.constructedClass
-import org.jetbrains.kotlin.backend.konan.ir.isAnonymousObject
-import org.jetbrains.kotlin.backend.konan.ir.name
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArguments
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 
 
 private const val DEBUG = true
 
-private fun debug(message: String) { if (DEBUG) println(message) }
+private fun debug(message: String) {
+    if (DEBUG) println(message)
+}
 
 class SSABlockIdGenerator {
     fun next(suffix: String): SSABlockId {
@@ -27,21 +23,21 @@ class SSABlockIdGenerator {
 }
 
 // TODO: Pass context about class here?
-class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
+class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
 
     override var generationContext: GenerationContext =
             GenerationContext.Function(this, null)
 
-    private val typeMapper = SSATypeMapper()
+    override val typeMapper = SSATypeMapper()
 
     private val declMapper = SSADeclarationsMapper(module, typeMapper)
 
     var blockIdGen = SSABlockIdGenerator()
 
 
-    override var curBlock = func.entry
+    override var curBlock = function.entry
 
-    private fun SSABlock.addParam(type: SSAType): SSABlockParam =
+    override fun SSABlock.addParam(type: SSAType): SSABlockParam =
             SSABlockParam(type, this).also { this.params.add(it) }
 
     // SSA construction-related
@@ -100,7 +96,7 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         }
 
         private fun tryRemoveTrivialParam(param: SSABlockParam): SSAValue {
-                return param
+            return param
 //            val index = param.owner.params.indexOf(param)
 //            val values = param.owner.preds.map { edge -> edge.args[index] }
 //
@@ -126,11 +122,15 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         }
     }
 
-    override fun addBlock(name: String): SSABlock =
-            addBlock(blockIdGen.next(name))
+    override fun createBlock(name: String): SSABlock =
+            SSABlock(function, blockIdGen.next(name))
 
-    override fun addBlock(id: SSABlockId): SSABlock =
-            SSABlock(func, id).add()
+    override fun createBlock(id: SSABlockId): SSABlock =
+            SSABlock(function, id)
+
+    override fun addBlock(ssaBlock: SSABlock) {
+        ssaBlock.add()
+    }
 
     private fun IrType.map() = typeMapper.map(this)
 
@@ -140,28 +140,28 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         irFunction.dispatchReceiverParameter?.let {
             // TODO: Reflect in owner type somehow
             val receiver = SSAReceiver(it.type.map())
-            func.dispatchReceiver = receiver
-            construct.writeVariable(func.entry, it, receiver)
+            function.dispatchReceiver = receiver
+            construct.writeVariable(function.entry, it, receiver)
         }
 
         irFunction.extensionReceiverParameter?.let {
             // TODO: Reflect in owner type somehow
             val receiver = SSAReceiver(it.type.map())
-            func.extensionReceiver = receiver
-            construct.writeVariable(func.entry, it, receiver)
+            function.extensionReceiver = receiver
+            construct.writeVariable(function.entry, it, receiver)
         }
 
         irFunction.valueParameters.forEach {
             val param = SSAFuncArgument(it.name.asString(), it.type.map())
-            func.params.add(param)
-            construct.writeVariable(func.entry, it, param)
+            function.params.add(param)
+            construct.writeVariable(function.entry, it, param)
         }
-        seal(func.entry)
+        seal(function.entry)
         irFunction.body?.let { generateBody(it) }
-        return func
+        return function
     }
 
-    private fun seal(block: SSABlock) {
+    override fun seal(block: SSABlock) {
         block.sealed = true
         // We need to populate missing block arguments.
         if (block !in construct.incompleteParams) return
@@ -171,7 +171,12 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
             val index = block.params.indexOf(param)
             for (edge in incomingEdges) {
                 val arg = construct.readVariable(edge.from, variable)
-                edge.args.add(index,arg)
+                try {
+                    edge.args.add(index, arg)
+                } catch (e: IndexOutOfBoundsException) {
+                    println(SSARender().render(function))
+                    throw e
+                }
             }
         }
         construct.incompleteParams.remove(block)
@@ -198,13 +203,13 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
 
     private fun generateVariable(irVariable: IrVariable) {
         val value = irVariable.initializer?.let { evalExpression(it) }
-                // TODO: explain
+        // TODO: explain
                 ?: SSAConstant.Undef
         val declaration = +SSADeclare(irVariable.name.identifier, value, curBlock)
         construct.writeVariable(curBlock, irVariable, declaration)
     }
 
-    private fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
+    override fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
         is IrTypeOperatorCall -> evalTypeOperatorCall(irExpr)
         is IrCall -> evalCall(irExpr)
         is IrDelegatingConstructorCall -> evalDelegatingConstructorCall(irExpr)
@@ -215,6 +220,7 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         is IrWhileLoop -> evalWhileLoop(irExpr)
         is IrWhen -> evalWhen(irExpr)
         is IrSetVariable -> evalSetVariable(irExpr)
+        is IrReturnableBlock     -> evalReturnableBlock(irExpr)
         is IrContainerExpression -> evalContainerExpression(irExpr)
         is IrGetField -> evalGetField(irExpr)
         is IrSetField -> evalSetField(irExpr)
@@ -226,20 +232,28 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         else -> TODO("$irExpr")
     }
 
+    private fun evalReturnableBlock(block: IrReturnableBlock): SSAValue {
+        return generationContext.inReturnableBlock(block) {
+            block.statements.forEach {
+                generateStatement(it)
+            }
+        }
+    }
+
     private fun evalTypeOperatorCall(irExpr: IrTypeOperatorCall): SSAValue =
             when (irExpr.operator) {
-                IrTypeOperator.CAST                      -> evaluateCast(irExpr)
+                IrTypeOperator.CAST -> evaluateCast(irExpr)
                 IrTypeOperator.IMPLICIT_INTEGER_COERCION -> evaluateIntegerCoercion(irExpr)
-                IrTypeOperator.IMPLICIT_CAST             -> evalExpression(irExpr.argument)
-                IrTypeOperator.IMPLICIT_NOTNULL          -> TODO(ir2string(irExpr))
+                IrTypeOperator.IMPLICIT_CAST -> evalExpression(irExpr.argument)
+                IrTypeOperator.IMPLICIT_NOTNULL -> TODO(ir2string(irExpr))
                 IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> {
                     evalExpression(irExpr.argument)
                     getUnit()
                 }
-                IrTypeOperator.SAFE_CAST                 -> throw IllegalStateException("safe cast wasn't lowered")
-                IrTypeOperator.INSTANCEOF                -> evaluateInstanceOf(irExpr)
-                IrTypeOperator.NOT_INSTANCEOF            -> evaluateNotInstanceOf(irExpr)
-                IrTypeOperator.SAM_CONVERSION            -> TODO(ir2string(irExpr))
+                IrTypeOperator.SAFE_CAST -> throw IllegalStateException("safe cast wasn't lowered")
+                IrTypeOperator.INSTANCEOF -> evaluateInstanceOf(irExpr)
+                IrTypeOperator.NOT_INSTANCEOF -> evaluateNotInstanceOf(irExpr)
+                IrTypeOperator.SAM_CONVERSION -> TODO(ir2string(irExpr))
             }
 
     private fun evaluateCast(irExpr: IrTypeOperatorCall): SSAValue =
@@ -284,64 +298,11 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
     }
 
     private fun evalWhen(irWhen: IrWhen): SSAValue =
-        WhenGenerator(irWhen).generate()
+            GenerationContext.When(this, generationContext, irWhen).generate()
 
-    private inner class WhenGenerator(val irWhen: IrWhen) {
+    override fun getUnit(): SSAValue = SSAConstant.Undef
 
-        private val exitBlock = SSABlock(func, blockIdGen.next("when_exit"))
-
-        private val param: SSABlockParam by lazy {
-            exitBlock.addParam(typeMapper.map(irWhen.type))
-        }
-
-        private val isExpression = isUnconditional(irWhen.branches.last()) && !irWhen.type.isUnit()
-
-        private fun isUnconditional(branch: IrBranch): Boolean =
-                branch.condition is IrConst<*>                            // If branch condition is constant.
-                        && (branch.condition as IrConst<*>).value as Boolean  // If condition is "true"
-
-        // TODO: common exit block
-        private fun generateWhenCase(branch: IrBranch, isLast: Boolean) {
-            val nextBlock = if (isLast) exitBlock else SSABlock(func, blockIdGen.next("when_cond"))
-            seal(curBlock)
-            val result = if (isUnconditional(branch)) {
-                evalExpression(branch.result)
-            } else {
-                val cond = evalExpression(branch.condition)
-                val bodyBlock = addBlock("when_body")
-                addCondBr(cond, bodyBlock, nextBlock)
-                curBlock = bodyBlock
-                seal(curBlock)
-                evalExpression(branch.result)
-            }
-
-            if (curBlock.body.isEmpty() || !curBlock.body.last().isTerminal()) {
-                val br = addBr(exitBlock)
-                if (isExpression) {
-                    br.edge.args.add(result)
-                }
-            }
-            if (nextBlock != exitBlock) {
-                nextBlock.add()
-            }
-            curBlock = nextBlock
-        }
-
-        fun generate(): SSAValue {
-            irWhen.branches.forEach {
-                generateWhenCase(it, it == irWhen.branches.last())
-            }
-            exitBlock.add()
-            exitBlock.sealed = true
-            return if (isExpression) {
-                param
-            } else {
-                getUnit()
-            }
-        }
-    }
-
-    private fun getUnit(): SSAValue = SSAConstant.Undef
+    override fun getNothing(): SSAValue = SSAConstant.Undef
 
     private fun evalSetVariable(setVariable: IrSetVariable): SSAValue {
         val value = evalExpression(setVariable.value)
@@ -364,7 +325,9 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
     private fun evalWhileLoop(irLoop: IrWhileLoop): SSAValue {
 
         generationContext.inLoop(irLoop) {
-            val loopBody = addBlock("loop_body")
+            val loopBody = createBlock("loop_body").apply {
+                addBlock(this)
+            }
 
             addBr(loopEntry)
 
@@ -386,11 +349,11 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
     }
 
     override fun addBr(to: SSABlock): SSABr =
-        +SSABr(SSAEdge(curBlock, to), curBlock)
+            +SSABr(SSAEdge(curBlock, to), curBlock)
 
-    fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
+    override fun addCondBr(cond: SSAValue, tru: SSABlock, fls: SSABlock) {
         val truEdge = SSAEdge(curBlock, tru)
-        val flsEdge = SSAEdge(curBlock,fls)
+        val flsEdge = SSAEdge(curBlock, fls)
         +SSACondBr(cond, truEdge, flsEdge, curBlock)
     }
 
@@ -400,7 +363,8 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
 
     private fun evalReturn(irReturn: IrReturn): SSAValue {
         val retVal = evalExpression(irReturn.value)
-        return +SSAReturn(retVal, curBlock)
+        val target = irReturn.returnTargetSymbol.owner
+        return generationContext.getReturn().emitReturn(retVal, target)
     }
 
     private fun evalConstant(irConst: IrConst<*>): SSAConstant = when (irConst.kind) {
@@ -427,9 +391,9 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         }
     }
 
-    private operator fun <T: SSAInstruction> T.unaryPlus(): T = this.add()
+    private operator fun <T : SSAInstruction> T.unaryPlus(): T = this.add()
 
-    override fun <T: SSAInstruction> T.add(): T {
+    override fun <T : SSAInstruction> T.add(): T {
         curBlock.body += this
         return this
     }
@@ -480,10 +444,9 @@ class SSAFunctionBuilderImpl(val func: SSAFunction, val module: SSAModule) : SSA
         return allocationSite
     }
 
-    // TODO: incorrect.
     private fun evalTry(irTry: IrTry): SSAValue {
         return generationContext.inTryCatch(irTry) {
-             evalExpression(irTry.tryResult)
+            evalExpression(irTry.tryResult)
         }
     }
 

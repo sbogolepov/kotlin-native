@@ -6,6 +6,9 @@ import org.jetbrains.kotlin.ir.expressions.IrCall
 //  1. Named operands should be expressed as properties pointing at element at operands list
 //     since it can be changed
 sealed class SSAInstruction(owner: SSABlock, val operands: MutableList<SSAValue> = mutableListOf()): SSAValue {
+
+    var comment: String? = null
+
     override val users = mutableSetOf<SSAInstruction>()
 
     private var _owner: SSABlock = owner
@@ -65,7 +68,10 @@ class SSADecRef(val ref: SSAValue, owner: SSABlock) : SSAInstruction(owner) {
     override val type = VoidType
 }
 
-class SSANOP(val comment: String, owner: SSABlock) : SSAInstruction(owner) {
+class SSANOP(comment: String, owner: SSABlock) : SSAInstruction(owner) {
+    init {
+        this.comment = comment
+    }
     override val type: SSAType = SpecialType
 }
 
