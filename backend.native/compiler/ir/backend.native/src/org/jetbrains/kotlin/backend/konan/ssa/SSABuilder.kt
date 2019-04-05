@@ -25,7 +25,7 @@ class SSABlockIdGenerator {
 // TODO: Pass context about class here?
 class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
 
-    override var generationContext: GenerationContext =
+    override var generationContext: GenerationContext<*> =
             GenerationContext.Function(this, null)
 
     override val typeMapper = SSATypeMapper()
@@ -233,6 +233,9 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
     }
 
     private fun evalReturnableBlock(block: IrReturnableBlock): SSAValue {
+        if (block.statements.isEmpty()) {
+            return getNothing()
+        }
         return generationContext.inReturnableBlock(block) {
             block.statements.forEach {
                 generateStatement(it)
@@ -298,7 +301,11 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
     }
 
     private fun evalWhen(irWhen: IrWhen): SSAValue =
-            GenerationContext.When(this, generationContext, irWhen).generate()
+            generationContext.inWhen(irWhen) {
+                irWhen.branches.forEach {
+                    generateWhenCase(it, it == irWhen.branches.last())
+                }
+            }
 
     override fun getUnit(): SSAValue = SSAConstant.Undef
 
@@ -322,8 +329,7 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
         return getUnit()
     }
 
-    private fun evalWhileLoop(irLoop: IrWhileLoop): SSAValue {
-
+    private fun evalWhileLoop(irLoop: IrWhileLoop): SSAValue =
         generationContext.inLoop(irLoop) {
             val loopBody = createBlock("loop_body").apply {
                 addBlock(this)
@@ -344,9 +350,6 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
             curBlock = loopExit
             seal(loopExit)
         }
-
-        return getUnit()
-    }
 
     override fun addBr(to: SSABlock): SSABr =
             +SSABr(SSAEdge(curBlock, to), curBlock)
@@ -394,6 +397,12 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
     private operator fun <T : SSAInstruction> T.unaryPlus(): T = this.add()
 
     override fun <T : SSAInstruction> T.add(): T {
+        if (curBlock.body.lastOrNull()?.isTerminal() == true) {
+            curBlock = createBlock("unreachable").apply {
+                addBlock(this)
+                sealed = true
+            }
+        }
         curBlock.body += this
         return this
     }
@@ -417,10 +426,12 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
             val receiver = args[0]
             +SSAMethodCall(receiver, callee, curBlock, irCall).apply {
                 appendOperands(args.drop(1))
+                comment = "context: ${generationContext::class.simpleName}"
             }
         } else {
             +SSACall(callee, curBlock, irCall).apply {
                 appendOperands(args)
+                comment = "context: ${generationContext::class.simpleName}"
             }
         }
     }

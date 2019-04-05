@@ -6,7 +6,7 @@ interface SSAFunctionBuilder {
 
     val function: SSAFunction
 
-    var generationContext: GenerationContext
+    var generationContext: GenerationContext<*>
 
     var curBlock: SSABlock
 

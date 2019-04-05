@@ -18,17 +18,17 @@ interface ReturnContext {
     fun emitReturn(value: SSAValue, target: IrReturnTarget): SSAValue
 }
 
-sealed class GenerationContext(
+sealed class GenerationContext<T>(
         val builder: SSAFunctionBuilder,
-        val parent: GenerationContext?
+        val parent: GenerationContext<*>?
 ) {
-    open fun complete() {}
+    abstract fun complete(result: T): SSAValue
 
     class Loop(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?,
+            parent: GenerationContext<*>?,
             val loop: IrLoop
-    ) : GenerationContext(builder, parent), LoopContext {
+    ) : GenerationContext<Unit>(builder, parent), LoopContext {
 
         val loopEntry = builder.createBlock("loop_entry").apply {
             builder.addBlock(this)
@@ -53,13 +53,17 @@ sealed class GenerationContext(
                 parent.getLoop().emitContinue(irContinue)
             }
         }
+
+        override fun complete(result: Unit): SSAValue {
+            return builder.getUnit()
+        }
     }
 
     class TryCatch(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?,
+            parent: GenerationContext<*>?,
             val irTry: IrTry
-    ) : GenerationContext(builder, parent), TryCatchContext {
+    ) : GenerationContext<Unit>(builder, parent), TryCatchContext {
 
         private lateinit var _returnValue: SSAValue
 
@@ -80,16 +84,17 @@ sealed class GenerationContext(
             parent.getTryCatch().emitThrow(value)
         }
 
-        override fun complete() {
+        override fun complete(result: Unit): SSAValue {
             builder.curBlock = continuation
             builder.seal(continuation)
+            return returnValue
         }
     }
 
     class Function(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?
-    ) : GenerationContext(builder, parent), TryCatchContext, ReturnContext {
+            parent: GenerationContext<*>?
+    ) : GenerationContext<Unit>(builder, parent), TryCatchContext, ReturnContext {
 
         private val landingPad: SSABlock by lazy {
             builder.createBlock(SSABlockId.LandingPad).apply {
@@ -108,13 +113,18 @@ sealed class GenerationContext(
                 with(builder) {
                     SSAReturn(value, curBlock).add()
                 }
+
+        override fun complete(result: Unit): SSAValue {
+            builder.seal(landingPad)
+            return SSAConstant.Undef
+        }
     }
 
     class When(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?,
+            parent: GenerationContext<*>?,
             private val irWhen: IrWhen
-    ) : GenerationContext(builder, parent) {
+    ) : GenerationContext<Unit>(builder, parent) {
 
         private val exitBlock = builder.createBlock("when_exit")
 
@@ -130,7 +140,7 @@ sealed class GenerationContext(
                 branch.condition is IrConst<*>                            // If branch condition is constant.
                         && (branch.condition as IrConst<*>).value as Boolean  // If condition is "true"
 
-        private fun generateWhenCase(branch: IrBranch, isLast: Boolean) = with(builder) {
+        fun generateWhenCase(branch: IrBranch, isLast: Boolean) = with(builder) {
             val nextBlock = if (isLast) exitBlock else createBlock("when_cond")
             seal(curBlock)
             val result = if (isUnconditional(branch)) {
@@ -155,11 +165,7 @@ sealed class GenerationContext(
             }
             curBlock = nextBlock
         }
-
-        fun generate(): SSAValue {
-            irWhen.branches.forEach {
-                generateWhenCase(it, it == irWhen.branches.last())
-            }
+        override fun complete(result: Unit): SSAValue {
             builder.addBlock(exitBlock)
             exitBlock.sealed = true
             return if (isExpression) {
@@ -172,20 +178,20 @@ sealed class GenerationContext(
 
     class ReturnableBlock(
             builder: SSAFunctionBuilder,
-            parent: GenerationContext?,
+            parent: GenerationContext<*>?,
             private val irReturnableBlock: IrReturnableBlock
-    ) : GenerationContext(builder, parent), ReturnContext {
+    ) : GenerationContext<Unit>(builder, parent), ReturnContext {
 
         private lateinit var _returnValue: SSAValue
 
-        val returnValue: SSAValue
+        private val returnValue: SSAValue
             get() = _returnValue
 
-        val exit: SSABlock by lazy {
+        private val exit: SSABlock by lazy {
             with(builder) {
                 createBlock("exit_from_returnable").apply {
                     addBlock(this)
-                    _returnValue = if (typeMapper.map(irReturnableBlock.type) != SpecialType) {
+                    _returnValue = if (!irReturnableBlock.type.isUnit()) {
                         addParam(typeMapper.map(irReturnableBlock.type))
                     } else {
                         getUnit()
@@ -201,78 +207,70 @@ sealed class GenerationContext(
                     } else {
                         addBr(exit).apply {
                             comment = "return in returnable block"
-                            edge.args.add(0, value)
+                            if (!irReturnableBlock.type.isUnit()) {
+                                edge.args.add(0, value)
+                            }
                         }
-
                         getNothing()
                     }
                 }
 
-        override fun complete() {
-            if (builder.curBlock.body.lastOrNull()?.isTerminal() == false) {
+        override fun complete(result: Unit): SSAValue {
+            if (builder.curBlock.body.isEmpty() || !builder.curBlock.body.last().isTerminal()) {
                 builder.addBr(exit)
             }
             builder.curBlock = exit
             builder.seal(exit)
+            return returnValue
         }
     }
 }
 
-fun GenerationContext.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -> Unit) {
+inline fun <G, T: GenerationContext<G>> GenerationContext<*>.inNewContext(newContext: T, action: T.() -> G): SSAValue {
+    val old = builder.generationContext
+    builder.generationContext = newContext
+
+    val value = newContext.complete(newContext.action())
+    builder.generationContext = old
+    return value
+}
+
+inline fun GenerationContext<*>.inWhen(irWhen: IrWhen, action: GenerationContext.When.() -> Unit): SSAValue {
+    val whenContext = GenerationContext.When(builder, this, irWhen)
+    return inNewContext(whenContext, action)
+}
+
+inline fun GenerationContext<*>.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -> Unit): SSAValue {
     val loop = GenerationContext.Loop(builder, this, irLoop)
-    val old = builder.generationContext
-    builder.generationContext = loop
-    try {
-        loop.action()
-    } finally {
-        loop.complete()
-        builder.generationContext = old
-    }
+    return inNewContext(loop, action)
 }
 
-inline fun GenerationContext.inTryCatch(irTry: IrTry, action: GenerationContext.TryCatch.() -> SSAValue): SSAValue {
+inline fun GenerationContext<*>.inTryCatch(irTry: IrTry, action: GenerationContext.TryCatch.() -> Unit): SSAValue {
     val tryCatch = GenerationContext.TryCatch(builder, this, irTry)
-    val old = builder.generationContext
-    builder.generationContext = tryCatch
-    try {
-        val result = tryCatch.action()
-        builder.addBr(tryCatch.continuation).apply { comment = "return try value" }.edge.args.add(0, result)
-        tryCatch.complete()
-    } finally {
-        builder.generationContext = old
-    }
-    return tryCatch.returnValue
+    return inNewContext(tryCatch, action)
 }
 
-inline fun <T> GenerationContext.inReturnableBlock(
+inline fun GenerationContext<*>.inReturnableBlock(
         irReturnableBlock: IrReturnableBlock,
-        action: GenerationContext.ReturnableBlock.() -> T
+        action: GenerationContext.ReturnableBlock.() -> Unit
 ): SSAValue {
     val returnableBlock = GenerationContext.ReturnableBlock(builder, this, irReturnableBlock)
-    val old = builder.generationContext
-    builder.generationContext = returnableBlock
-    try {
-        returnableBlock.action()
-        returnableBlock.complete()
-    } finally {
-        builder.generationContext = old
-    }
-    return returnableBlock.returnValue
+    return inNewContext(returnableBlock, action)
 }
 
-fun GenerationContext?.getLoop(): LoopContext = when (this) {
+fun GenerationContext<*>?.getLoop(): LoopContext = when (this) {
     is LoopContext -> this
     null -> error("Cannot find parent loop")
     else -> parent.getLoop()
 }
 
-fun GenerationContext?.getTryCatch(): TryCatchContext = when (this) {
+fun GenerationContext<*>?.getTryCatch(): TryCatchContext = when (this) {
     is TryCatchContext -> this
     null -> error("Cannot find parent try-catch")
     else -> parent.getTryCatch()
 }
 
-fun GenerationContext?.getReturn(): ReturnContext = when (this) {
+fun GenerationContext<*>?.getReturn(): ReturnContext = when (this) {
     is ReturnContext -> this
     null -> error("Cannot find parent try-catch")
     else -> parent.getReturn()

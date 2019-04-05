@@ -174,23 +174,23 @@ private class LLVMFunctionFromSSA(
         val ib = context.irModule!!.irBuiltins
 
         with(codegen) {
+            val functionSymbol = function.symbol
             return when {
-                function == ib.eqeqeqFun -> icmpEq(args[0], args[1])
-                function == ib.booleanNotFun -> icmpNe(args[0], constTrue)
-
-                function.isComparisonFunction(ib.greaterFunByOperandType) -> {
+                functionSymbol == ib.eqeqeqSymbol -> icmpEq(args[0], args[1])
+                functionSymbol == ib.booleanNotSymbol -> icmpNe(args[0], constTrue)
+                functionSymbol.isComparisonFunction(ib.greaterFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
                     else icmpGt(args[0], args[1])
                 }
-                function.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
+                functionSymbol.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
                     else icmpGe(args[0], args[1])
                 }
-                function.isComparisonFunction(ib.lessFunByOperandType) -> {
+                functionSymbol.isComparisonFunction(ib.lessFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
                     else icmpLt(args[0], args[1])
                 }
-                function.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
+                functionSymbol.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
                     if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
                     else icmpLe(args[0], args[1])
                 }
