@@ -126,18 +126,66 @@ private class LLVMFunctionFromSSA(
         is SSACatch -> emitCatch(insn)
         is SSADeclare -> emitDeclare(insn)
         is SSAThrow -> emitThrow(insn)
-        is SSAGetGlobal -> TODO()
-        is SSASetGlobal -> TODO()
-        is SSAIncRef -> TODO()
-        is SSADecRef -> TODO()
-        is SSANOP -> TODO()
-        is SSAGetField -> TODO()
-        is SSASetField -> TODO()
-        is SSAGetObjectValue -> TODO()
-        is SSAInstanceOf -> TODO()
-        is SSACast -> TODO()
-        is SSAIntegerCoercion -> TODO()
-        is SSANot -> TODO()
+        is SSAGetGlobal -> emitGetGlobal(insn)
+        is SSASetGlobal -> emitSetGlobal(insn)
+        is SSAIncRef -> emitIncRef(insn)
+        is SSADecRef -> emitDecRef(insn)
+        is SSANOP -> emitNop(insn)
+        is SSAGetField -> emitGetField(insn)
+        is SSASetField -> emitSetField(insn)
+        is SSAGetObjectValue -> emitGetObjectValue(insn)
+        is SSAInstanceOf -> emitInstanceOf(insn)
+        is SSACast -> emitCast(insn)
+        is SSAIntegerCoercion -> emitIntegerCoercion(insn)
+        is SSANot -> emitNot(insn)
+    }
+
+    private fun emitNot(insn: SSANot): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitIntegerCoercion(insn: SSAIntegerCoercion): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitCast(insn: SSACast): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitInstanceOf(insn: SSAInstanceOf): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitGetObjectValue(insn: SSAGetObjectValue): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitSetField(insn: SSASetField): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitGetField(insn: SSAGetField): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitNop(insn: SSANOP): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitDecRef(insn: SSADecRef): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitIncRef(insn: SSAIncRef): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitSetGlobal(insn: SSASetGlobal): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitGetGlobal(insn: SSAGetGlobal): LLVMValueRef {
+        TODO("not implemented")
     }
 
     private fun emitThrow(insn: SSAThrow): LLVMValueRef {

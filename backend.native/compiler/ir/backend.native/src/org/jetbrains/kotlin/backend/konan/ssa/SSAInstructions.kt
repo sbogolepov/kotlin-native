@@ -42,15 +42,6 @@ sealed class SSAInstruction(owner: SSABlock, val operands: MutableList<SSAValue>
         }
         operands.forEach { it.users -= this }
     }
-
-    fun appendOperand(operand: SSAValue) {
-        operands += operand
-        operand.users += this
-    }
-
-    fun appendOperands(operands: List<SSAValue>) {
-        operands.forEach { appendOperand(it) }
-    }
 }
 
 class SSADeclare(val name: String, value: SSAValue, owner: SSABlock) : SSAInstruction(owner, mutableListOf(value)) {
