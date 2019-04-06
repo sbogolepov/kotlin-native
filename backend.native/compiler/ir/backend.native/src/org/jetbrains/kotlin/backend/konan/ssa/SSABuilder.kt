@@ -397,6 +397,7 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
     private operator fun <T : SSAInstruction> T.unaryPlus(): T = this.add()
 
     override fun <T : SSAInstruction> T.add(): T {
+        // Dirty hack against ugly state of incoming IR.
         if (curBlock.body.lastOrNull()?.isTerminal() == true) {
             curBlock = createBlock("unreachable").apply {
 //                addBlock(this)
@@ -424,15 +425,9 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
 
         return if (irCall.dispatchReceiver != null) {
             val receiver = args[0]
-            +SSAMethodCall(receiver, callee, curBlock, irCall).apply {
-                appendOperands(args.drop(1))
-                comment = "context: ${generationContext::class.simpleName}"
-            }
+            +SSAMethodCall(receiver, args.drop(1), callee, curBlock, irCall)
         } else {
-            +SSACall(callee, curBlock, irCall).apply {
-                appendOperands(args)
-                comment = "context: ${generationContext::class.simpleName}"
-            }
+            +SSACall(args, callee, curBlock, irCall)
         }
     }
 
@@ -448,10 +443,7 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
         }
 
         val callee = declMapper.mapFunction(constructor)
-        +SSAMethodCall(allocationSite, callee, curBlock, irCall).apply {
-            appendOperands(args)
-        }
-
+        +SSAMethodCall(allocationSite, args, callee, curBlock, irCall)
         return allocationSite
     }
 

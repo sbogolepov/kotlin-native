@@ -21,7 +21,7 @@ class CallsLoweringPass : FunctionPass {
             }
         }
 
-        val newBody = function.blocks.fold(listOf<SSABlock>()) { body, block ->
+        val newBody = function.topSortedBlocks.fold(listOf<SSABlock>()) { body, block ->
             body + lowerBlock(function, block, landingPad)
         }
 
@@ -50,12 +50,10 @@ class CallsLoweringPass : FunctionPass {
                 val excEdge = SSAEdge(curBlock, landingPad.value)
 
                 val newCallSite = when (insn) {
-                    is SSAMethodCall -> SSAMethodInvoke(insn.receiver, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
-                        appendOperands(insn.operands.drop(1))
-                    }
-                    is SSACall -> SSAInvoke(insn.callee, contEdge, excEdge, curBlock, insn.irOrigin).apply {
-                        appendOperands(insn.operands)
-                    }
+                    is SSAMethodCall ->
+                        SSAMethodInvoke(insn.receiver, insn.args, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin)
+                    is SSACall ->
+                        SSAInvoke(insn.args, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin)
                     else -> error("Unexpected call site type: $insn")
                 }
                 insn.replaceBy(newCallSite)
@@ -71,6 +69,7 @@ class CallsLoweringPass : FunctionPass {
                             insn.truEdge.changeSrc(curBlock),
                             insn.flsEdge.changeSrc(curBlock),
                             curBlock)
+                    is SSAThrow -> SSAThrow(insn.edge.changeSrc(curBlock), curBlock)
                     else -> insn
                 }.moveTo(curBlock)
             }

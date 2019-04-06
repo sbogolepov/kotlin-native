@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.common.push
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 
 class SSAModule(val name: String, val index: SSAModuleIndex) {
@@ -40,22 +41,22 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     object Undef : SSAConstant(SpecialType)
 
     object Null : SSAConstant(NullRefType)
-    class Bool(val value: kotlin.Boolean): SSAConstant(SSAPrimitiveType.BOOL)
+    class Bool(val value: kotlin.Boolean) : SSAConstant(SSAPrimitiveType.BOOL)
     class Byte(val value: kotlin.Byte) : SSAConstant(SSAPrimitiveType.BYTE)
     class Char(val value: kotlin.Char) : SSAConstant(SSAPrimitiveType.CHAR)
-    class Short(val value: kotlin.Short): SSAConstant(SSAPrimitiveType.SHORT)
+    class Short(val value: kotlin.Short) : SSAConstant(SSAPrimitiveType.SHORT)
     class Int(val value: kotlin.Int) : SSAConstant(SSAPrimitiveType.INT)
     class Long(val value: kotlin.Long) : SSAConstant(SSAPrimitiveType.LONG)
     class Float(val value: kotlin.Float) : SSAConstant(SSAPrimitiveType.FLOAT)
     class Double(val value: kotlin.Double) : SSAConstant(SSAPrimitiveType.DOUBLE)
-    class String(val value: kotlin.String): SSAConstant(SSAStringType)
+    class String(val value: kotlin.String) : SSAConstant(SSAStringType)
 }
 
 class SSAFunction(
         val name: String,
         val type: SSAFuncType,
         val irOrigin: IrFunction? = null
-): SSACallable {
+) : SSACallable {
     var dispatchReceiver: SSAReceiver? = null
     var extensionReceiver: SSAReceiver? = null
     val entry = SSABlock(this, SSABlockId.Entry)
@@ -63,6 +64,25 @@ class SSAFunction(
     val params = mutableListOf<SSAFuncArgument>()
     val metadata = mutableListOf<String>()
 }
+
+val SSAFunction.topSortedBlocks: List<SSABlock>
+    get() {
+        val workingList = mutableListOf(entry)
+        val visited = mutableSetOf(entry)
+        val result = mutableListOf<SSABlock>()
+        while (workingList.isNotEmpty()) {
+            val node = workingList[0]
+            workingList.removeAt(0)
+            result += node
+            node.succs.forEach {
+                if (it.to !in visited) {
+                    visited += it.to
+                    workingList += it.to
+                }
+            }
+        }
+        return result
+    }
 
 sealed class SSABlockId {
     object Entry : SSABlockId() {
@@ -86,7 +106,7 @@ class SSAEdge(
         val from: SSABlock,
         var to: SSABlock,
         val args: MutableList<SSAValue> = mutableListOf()
-): SSAValue {
+) : SSAValue {
 
     init {
         from.succs += this
@@ -101,7 +121,7 @@ class SSAEdge(
             SSAEdge(newSrc, to, args)
 }
 
-class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple()): SSAValue {
+class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple()) : SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
 
@@ -120,7 +140,7 @@ class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple())
     }
 }
 
-fun SSAInstruction.isTerminal() = when(this) {
+fun SSAInstruction.isTerminal() = when (this) {
     is SSAReturn,
     is SSABr,
     is SSACondBr,

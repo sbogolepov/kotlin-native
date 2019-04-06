@@ -36,6 +36,7 @@ fun validateFunction(fn: SSAFunction): ValidationResult {
                     hasError = true
                 }
                 if (operand is SSAInstruction && operand.owner !in fn.blocks) {
+                    println("$insn")
                     println("$operand: instruction's owner doesn't belong to function blocks.")
                     hasError = true
                 }

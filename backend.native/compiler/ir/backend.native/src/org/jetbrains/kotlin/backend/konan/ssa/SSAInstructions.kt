@@ -85,37 +85,63 @@ sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = muta
 
     override val type: SSAType
         get() = callee.type.returnType
+
+    abstract val args: List<SSAValue>
 }
 
 class SSACall(
+        args: List<SSAValue>,
         override val callee: SSAFunction,
         owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite(owner)
+) : SSACallSite(owner, args.toMutableList()) {
+
+    override val args: List<SSAValue>
+        get() = operands
+}
 
 class SSAMethodCall(
-        override val receiver: SSAValue,
+        receiver: SSAValue,
+        args: List<SSAValue>,
         override val callee: SSAFunction,
         owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite(owner, mutableListOf(receiver)), SSAReceiverAccessor
+) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())), SSAReceiverAccessor {
+
+    override val receiver: SSAValue
+        get() = operands[0]
+
+    override val args: List<SSAValue>
+        get() = operands.drop(1)
+}
 
 class SSAInvoke(
+        args: List<SSAValue>,
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
         owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite(owner)
+) : SSACallSite(owner, args.toMutableList()) {
+    override val args: List<SSAValue>
+        get() = operands
+}
 
 class SSAMethodInvoke(
-        override val receiver: SSAValue,
+        receiver: SSAValue,
+        args: List<SSAValue>,
         override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
         owner: SSABlock,
         override val irOrigin: IrCall
-): SSACallSite(owner, mutableListOf(receiver)), SSAReceiverAccessor
+): SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())), SSAReceiverAccessor {
+    override val receiver: SSAValue
+        get() = operands[0]
+
+    override val args: List<SSAValue>
+        get() = operands.drop(1)
+}
 
 class SSABr(val edge: SSAEdge, owner: SSABlock) : SSAInstruction(owner) {
     override val type: SSAType = VoidType
