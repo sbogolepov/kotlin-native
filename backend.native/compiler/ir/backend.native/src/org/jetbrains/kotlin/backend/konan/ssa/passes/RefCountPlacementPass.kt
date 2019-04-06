@@ -9,19 +9,16 @@ class RefCountPlacementPass : FunctionPass {
     override fun apply(function: SSAFunction) {
         for (block in function.blocks) {
             for (insn in block.body) {
-                if (insn is SSAAlloc) {
-                    analyzeAllocationSite(insn)
-                }
-                if (insn is SSACallSite) {
-                    analyzeCallSite(insn)
+                when (insn) {
+                    is SSACallSite -> analyzeCallSite(insn)
+                    is SSAAlloc -> analyzeAllocationSite(insn)
                 }
             }
         }
     }
 
     private fun analyzeCallSite(insn: SSACallSite) {
-        val returnType = insn.callee.type.returnType
-//        if (returnType is ReferenceType)
+
     }
 
     private fun analyzeAllocationSite(insn: SSAAlloc) {

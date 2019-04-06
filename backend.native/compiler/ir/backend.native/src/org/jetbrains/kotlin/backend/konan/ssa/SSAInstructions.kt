@@ -159,7 +159,7 @@ class SSAReturn(retVal: SSAValue?, owner: SSABlock
         get() = operands.getOrNull(0)
 }
 
-class SSAAlloc(override val type: SSAType, owner: SSABlock) : SSAInstruction(owner)
+class SSAAlloc(override val type: ReferenceType, owner: SSABlock) : SSAInstruction(owner)
 
 class SSAGetField(
         override val receiver: SSAValue,

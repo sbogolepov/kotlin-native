@@ -67,7 +67,10 @@ private class LLVMFunctionFromSSA(
             }
         }
         for (block in ssaFunc.blocks) {
-            generateBlock(block)
+            when {
+                block.id == SSABlockId.LandingPad -> generateLandingPad(block)
+                else -> generateBlock(block)
+            }
         }
         return llvmFunc
     }
@@ -78,6 +81,11 @@ private class LLVMFunctionFromSSA(
         for (insn in block.body) {
             emitValue(insn)
         }
+    }
+
+    private fun generateLandingPad(block: SSABlock) {
+        val bb = blocksMap.getValue(block)
+        codegen.positionAtEnd(bb)
     }
 
     private val valueCache = mutableMapOf<SSAValue, LLVMValueRef>()
@@ -140,9 +148,8 @@ private class LLVMFunctionFromSSA(
         is SSANot -> emitNot(insn)
     }
 
-    private fun emitNot(insn: SSANot): LLVMValueRef {
-        TODO("not implemented")
-    }
+    private fun emitNot(insn: SSANot): LLVMValueRef =
+        codegen.not(emitValue(insn.value))
 
     private fun emitIntegerCoercion(insn: SSAIntegerCoercion): LLVMValueRef {
         TODO("not implemented")

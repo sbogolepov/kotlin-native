@@ -40,6 +40,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                 }
                 println("${pass.name} completed.")
             }
+            println(SSARender().render(context.ssaModule))
         }
 )
 
