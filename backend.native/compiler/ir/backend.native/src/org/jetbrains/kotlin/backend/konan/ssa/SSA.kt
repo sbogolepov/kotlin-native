@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.common.push
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 
 class SSAModule(val name: String, val index: SSAModuleIndex) {
@@ -10,7 +9,11 @@ class SSAModule(val name: String, val index: SSAModuleIndex) {
     val imports = mutableListOf<SSAFunction>()
 }
 
-interface SSACallable
+interface SSACallable {
+    val name: String
+    val type: SSAFuncType
+    val irOrigin: IrFunction?
+}
 
 interface SSAValue {
     val users: MutableSet<SSAInstruction>
@@ -39,8 +42,9 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     override val users = mutableSetOf<SSAInstruction>()
 
     object Undef : SSAConstant(SpecialType)
+    object Unit : SSAConstant(SSAUnitType)
+    object Null : SSAConstant(SSAAny)
 
-    object Null : SSAConstant(NullRefType)
     class Bool(val value: kotlin.Boolean) : SSAConstant(SSAPrimitiveType.BOOL)
     class Byte(val value: kotlin.Byte) : SSAConstant(SSAPrimitiveType.BYTE)
     class Char(val value: kotlin.Char) : SSAConstant(SSAPrimitiveType.CHAR)
@@ -52,10 +56,16 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     class String(val value: kotlin.String) : SSAConstant(SSAStringType)
 }
 
+class SSAVirtualFunction(
+        override val name: String,
+        override val type: SSAFuncType,
+        override val irOrigin: IrFunction? = null
+) : SSACallable
+
 class SSAFunction(
-        val name: String,
-        val type: SSAFuncType,
-        val irOrigin: IrFunction? = null
+        override val name: String,
+        override val type: SSAFuncType,
+        override val irOrigin: IrFunction? = null
 ) : SSACallable {
     var dispatchReceiver: SSAReceiver? = null
     var extensionReceiver: SSAReceiver? = null

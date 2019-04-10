@@ -1,71 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.konan.ir.allParameters
-import org.jetbrains.kotlin.backend.konan.ir.isAnonymousObject
-import org.jetbrains.kotlin.backend.konan.ir.name
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
-
-private fun getLocalName(parent: FqName, descriptor: IrDeclaration): Name {
-    if (descriptor.isAnonymousObject) {
-        return Name.identifier("anon")
-    }
-
-    return descriptor.name
-}
-
-private fun getFqName(descriptor: IrDeclaration): FqName {
-    val parent = descriptor.parent
-    val parentFqName = when (parent) {
-        is IrPackageFragment -> parent.fqName
-        is IrDeclaration -> getFqName(parent)
-        else -> error(parent)
-    }
-
-    val localName = getLocalName(parentFqName, descriptor)
-    return parentFqName.child(localName)
-}
-
-class SSATypeMapper {
-    fun map(irType: IrType): SSAType {
-        return if (irType.isPrimitiveType()) when {
-            irType.isBoolean() -> SSAPrimitiveType.BOOL
-            irType.isByte() -> SSAPrimitiveType.BYTE
-            irType.isChar() -> SSAPrimitiveType.CHAR
-            irType.isShort() -> SSAPrimitiveType.SHORT
-            irType.isInt() -> SSAPrimitiveType.INT
-            irType.isLong() -> SSAPrimitiveType.LONG
-            irType.isFloat() -> SSAPrimitiveType.FLOAT
-            irType.isDouble() -> SSAPrimitiveType.DOUBLE
-            else -> TODO("Unsupported primitive type: ${irType.classifierOrNull?.descriptor?.fqNameUnsafe?.asString()}")
-        } else {
-            SSAWrapperType(irType)
-        }
-    }
-}
-
-class SSADeclarationsMapper(val module: SSAModule, val typeMapper: SSATypeMapper) {
-
-    fun mapFunction(func: IrFunction): SSAFunction {
-        module.index.functions.find { it.first == func }?.let {
-            return it.second
-        }
-        module.index.imports.find { it.first == func }?.let {
-            return it.second
-        }
-        val type = SSAFuncType(
-                typeMapper.map(func.returnType),
-                func.allParameters.map { typeMapper.map(it.type) }
-        )
-        val ssaFunction = SSAFunction(getFqName(func).asString(), type, func)
-        module.imports += ssaFunction
-        module.index.imports += func to ssaFunction
-        return ssaFunction
-    }
-}
 
 class SSAModuleIndex {
     val functions = mutableListOf<Pair<IrFunction, SSAFunction>>()
@@ -88,14 +23,12 @@ class SSAModuleBuilder {
 
     private fun createIndex(irModule: IrModuleFragment): SSAModuleIndex {
         val index = SSAModuleIndex()
-        for (irFile in irModule.files) {
-            for (decl in irFile.declarations) {
-                if (decl is IrFunction) {
-                    val ssa = createSSAFuncFromIr(decl)
-                    index.functions += decl to ssa
+        irModule.files.flatMap { it.declarations }.forEach { when (it) {
+                is IrFunction -> {
+                    index.functions += it to createSSAFuncFromIr(it)
                 }
-                if (decl is IrClass) {
-                    index.functions += indexClassMethods(decl)
+                is IrClass -> {
+                    index.functions += indexClassMethods(it)
                 }
             }
         }

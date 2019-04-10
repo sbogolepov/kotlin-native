@@ -461,12 +461,12 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
 
     private fun evalBreak(irBreak: IrBreak): SSAValue {
         generationContext.getLoop().emitBreak(irBreak)
-        return SSAConstant.Undef
+        return SSAConstant.Unit
     }
 
     private fun evalContinue(irContinue: IrContinue): SSAValue {
         generationContext.getLoop().emitContinue(irContinue)
-        return SSAConstant.Undef
+        return SSAConstant.Unit
     }
 
     private fun evalVararg(irVararg: IrVararg): SSAValue {

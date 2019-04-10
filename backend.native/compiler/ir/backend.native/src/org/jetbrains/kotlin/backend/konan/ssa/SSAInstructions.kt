@@ -71,7 +71,7 @@ interface SSAReceiverAccessor {
 }
 
 sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = mutableListOf()) : SSAInstruction(owner, operands) {
-    abstract val callee: SSAFunction
+    abstract val callee: SSACallable
     abstract val irOrigin: IrCall
 
     override val type: SSAType
@@ -82,7 +82,7 @@ sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = muta
 
 class SSACall(
         args: List<SSAValue>,
-        override val callee: SSAFunction,
+        override val callee: SSACallable,
         owner: SSABlock,
         override val irOrigin: IrCall
 ) : SSACallSite(owner, args.toMutableList()) {
@@ -94,7 +94,7 @@ class SSACall(
 class SSAMethodCall(
         receiver: SSAValue,
         args: List<SSAValue>,
-        override val callee: SSAFunction,
+        override val callee: SSACallable,
         owner: SSABlock,
         override val irOrigin: IrCall
 ) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())), SSAReceiverAccessor {
@@ -108,7 +108,7 @@ class SSAMethodCall(
 
 class SSAInvoke(
         args: List<SSAValue>,
-        override val callee: SSAFunction,
+        override val callee: SSACallable,
         val continuation: SSAEdge,
         val exception: SSAEdge,
         owner: SSABlock,
