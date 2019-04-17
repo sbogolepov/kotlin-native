@@ -1,13 +1,11 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.common.ir.isFinalClass
+import org.jetbrains.kotlin.backend.konan.descriptors.isAbstract
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.types.IrType
 
 interface SSAType
-
-interface SSATypeFromIr {
-    val origin: IrType
-}
 
 object SpecialType : SSAType
 
@@ -23,7 +21,13 @@ object SSAStringType : ReferenceType()
 
 object SSANothingType: ReferenceType()
 
-class SSAClass(val origin: IrClass) : ReferenceType()
+class SSAClass(
+        val origin: IrClass,
+        val superTypes: List<SSAClass>,
+        val vtable: List<SSACallable>,
+        val isFinal: Boolean,
+        val isAbstact: Boolean
+) : ReferenceType()
 
 class SSAWrapperType(val irType: IrType): SSAType
 

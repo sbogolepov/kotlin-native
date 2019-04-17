@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.ir.declarations.*
 
 class SSAModuleIndex {
@@ -8,43 +9,32 @@ class SSAModuleIndex {
 }
 
 // Better to transform to some sort of SymbolTable
-class SSAModuleBuilder {
+internal class SSAModuleBuilder(val context: Context) {
 
-    private val typeMapper = SSATypeMapper()
+    private val index = SSAModuleIndex()
 
-    private fun createSSAFuncFromIr(irFunction: IrFunction): SSAFunction {
-        val name = irFunction.name.asString()
-        val type = SSAFuncType(
-                typeMapper.map(irFunction.returnType),
-                irFunction.valueParameters.map { typeMapper.map(it.type) }
-        )
-        return SSAFunction(name, type)
-    }
+    private val typeMapper = SSATypeMapper(context, index)
 
-    private fun createIndex(irModule: IrModuleFragment): SSAModuleIndex {
-        val index = SSAModuleIndex()
+    private fun createIndex(irModule: IrModuleFragment) {
         irModule.files.flatMap { it.declarations }.forEach { when (it) {
                 is IrFunction -> {
-                    index.functions += it to createSSAFuncFromIr(it)
+                    index.functions += it to typeMapper.mapFunction(it)
                 }
                 is IrClass -> {
                     index.functions += indexClassMethods(it)
                 }
             }
         }
-        return index
     }
 
     fun build(irModule: IrModuleFragment): SSAModule {
-        val index = createIndex(irModule)
+        createIndex(irModule)
         val module = SSAModule(irModule.name.asString(), index)
         for ((ir, ssa) in index.functions) {
             println("Generating ${ir.name}")
-            val ssaFunctionBuilderImpl = SSAFunctionBuilderImpl(ssa, module)
+            val ssaFunctionBuilderImpl = SSAFunctionBuilderImpl(ssa, module, typeMapper)
             module.functions += ssaFunctionBuilderImpl.build(ir)
-            (ssaFunctionBuilderImpl.generationContext as? GenerationContext.Function)?.let {
-                it.complete(Unit)
-            }
+            (ssaFunctionBuilderImpl.generationContext as? GenerationContext.Function)?.complete(Unit)
         }
         return module
     }
@@ -54,12 +44,12 @@ class SSAModuleBuilder {
         for (decl in irClass.declarations) {
             if (decl is IrProperty) {
                 decl.getter?.let {
-                    val fn = createSSAFuncFromIr(it)
+                    val fn = typeMapper.mapFunction(it)
                     fn.metadata += "getter"
                     methods += it to fn
                 }
                 decl.setter?.let {
-                    val fn = createSSAFuncFromIr(it)
+                    val fn = typeMapper.mapFunction(it)
                     fn.metadata += "setter"
                     methods += it to fn
                 }

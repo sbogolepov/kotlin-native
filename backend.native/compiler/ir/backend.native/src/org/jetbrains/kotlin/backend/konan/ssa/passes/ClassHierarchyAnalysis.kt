@@ -1,8 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes
 
-import org.jetbrains.kotlin.backend.konan.ssa.SSAFunction
-import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
-import org.jetbrains.kotlin.backend.konan.ssa.WorkList
+import org.jetbrains.kotlin.backend.konan.ssa.*
 
 class ClassHierarchyAnalysisResults()
 
@@ -15,6 +13,16 @@ class ClassHierarchyAnalysis : ModulePass<ClassHierarchyAnalysisResults> {
 
         while (!workList.isEmpty()) {
             val currentFunction = workList.get()
+            currentFunction.blocks.flatMap { it.body }.filterIsInstance<SSACallSite>().forEach {
+                when (val callee = it.callee) {
+                    is SSAFunction -> {
+                        workList.add(callee)
+                    }
+                    is SSAVirtualFunction -> {
+
+                    }
+                }
+            }
         }
     }
 

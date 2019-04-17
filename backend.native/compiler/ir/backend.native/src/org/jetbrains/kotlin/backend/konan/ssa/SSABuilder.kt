@@ -23,12 +23,13 @@ class SSABlockIdGenerator {
 }
 
 // TODO: Pass context about class here?
-class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSAModule) : SSAFunctionBuilder {
+internal class SSAFunctionBuilderImpl(
+        override val function: SSAFunction,
+        val module: SSAModule,
+        override val typeMapper: SSATypeMapper) : SSAFunctionBuilder {
 
     override var generationContext: GenerationContext<*> =
             GenerationContext.Function(this, null)
-
-    override val typeMapper = SSATypeMapper()
 
     private val declMapper = SSADeclarationsMapper(module, typeMapper)
 
@@ -435,7 +436,7 @@ class SSAFunctionBuilderImpl(override val function: SSAFunction, val module: SSA
         val constructor = irCall.symbol.owner as IrConstructor
         val irClass = (irCall.symbol as IrConstructorSymbol).owner.constructedClass
 
-        val ssaClass = SSAClass(irClass)
+        val ssaClass = typeMapper.mapClass(irClass)
         val allocationSite = +SSAAlloc(ssaClass, curBlock)
 
         val args = (irCall.getArguments()).map { (_, paramExpr) ->
