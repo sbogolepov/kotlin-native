@@ -24,7 +24,8 @@ object SSANothingType: ReferenceType()
 class SSAClass(
         val origin: IrClass,
         val superTypes: List<SSAClass>,
-        val vtable: List<SSACallable>,
+        val vtable: List<SSAFunction>,
+        val itable: List<SSAFunction>,
         val isFinal: Boolean,
         val isAbstact: Boolean
 ) : ReferenceType()

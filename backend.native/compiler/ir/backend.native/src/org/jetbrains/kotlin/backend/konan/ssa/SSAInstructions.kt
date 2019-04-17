@@ -121,7 +121,7 @@ class SSAInvoke(
 class SSAMethodInvoke(
         receiver: SSAValue,
         args: List<SSAValue>,
-        override val callee: SSAFunction,
+        override val callee: SSACallable,
         val continuation: SSAEdge,
         val exception: SSAEdge,
         owner: SSABlock,

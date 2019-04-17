@@ -13,7 +13,7 @@ internal class SSAModuleBuilder(val context: Context) {
 
     private val index = SSAModuleIndex()
 
-    private val typeMapper = SSATypeMapper(context, index)
+    private val typeMapper = SSATypeMapper(context)
 
     private fun createIndex(irModule: IrModuleFragment) {
         irModule.files.flatMap { it.declarations }.forEach { when (it) {

@@ -3,10 +3,9 @@ package org.jetbrains.kotlin.backend.konan.ssa
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 
 class SSAModule(val name: String, val index: SSAModuleIndex) {
-    val externalTypes = mutableListOf<SSAWrapperType>()
-    val types = mutableListOf<SSAType>()
     val functions = mutableListOf<SSAFunction>()
     val imports = mutableListOf<SSAFunction>()
+    val classes = mutableListOf<SSAType>()
 }
 
 interface SSACallable {

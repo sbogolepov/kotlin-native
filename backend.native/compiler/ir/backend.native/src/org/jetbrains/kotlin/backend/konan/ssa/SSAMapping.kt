@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
+import org.jetbrains.kotlin.backend.common.ir.isFinalClass
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.KonanBackendContext
 import org.jetbrains.kotlin.backend.konan.descriptors.isAbstract
@@ -13,7 +14,7 @@ import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
-internal class SSATypeMapper(val context: Context, val index: SSAModuleIndex) {
+internal class SSATypeMapper(val context: Context) {
     private val typeCache = mutableMapOf<IrType, SSAType>()
 
     fun map(irType: IrType): SSAType = typeCache.getOrPut(irType) {
@@ -43,13 +44,17 @@ internal class SSATypeMapper(val context: Context, val index: SSAModuleIndex) {
 
     private fun createClass(irClass: IrClass): SSAClass {
         val isAbstact = irClass.isAbstract()
+        val isFinal = irClass.isFinalClass
         val superTypes = irClass.superTypes.map { mapClass(it.getClass()!!) }
-        val vtable = if (isAbstact) {
+        val (vtable, itable) = if (!isAbstact) {
             val vtableBuilder = context.getVtableBuilder(irClass)
-            vtableBuilder.vtableEntries.map { mapFunction(it.getImplementation(context)!!) }
+            val vtable = vtableBuilder.vtableEntries.map { mapFunction(it.getImplementation(context)!!) }
+            val itable = vtableBuilder.methodTableEntries.map { mapFunction(it.getImplementation(context)!!) }
+            Pair(vtable, itable)
         } else {
-            emptyList()
+            Pair(listOf(), listOf())
         }
+        return SSAClass(irClass, superTypes, vtable, itable, isAbstact, isFinal)
     }
 
     private fun mapFunctionType(irFunction: IrFunction): SSAFuncType =

@@ -1,9 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes
 
-import org.jetbrains.kotlin.backend.konan.ssa.SSACallSite
-import org.jetbrains.kotlin.backend.konan.ssa.SSAFunction
-import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
-import org.jetbrains.kotlin.backend.konan.ssa.WorkList
+import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.utils.addIfNotNull
 
 sealed class CallSite(val caller: SSAFunction, val callees: Set<SSAFunction>) {
     class Mono(caller: SSAFunction, callee: SSAFunction) : CallSite(caller, setOf(callee))
@@ -14,7 +12,7 @@ sealed class CallSite(val caller: SSAFunction, val callees: Set<SSAFunction>) {
 
 class CallGraph(val callSites: List<CallSite>)
 
-class CallGraphBuilder(val subTypes: SubTypes) : ModulePass<CallGraph> {
+class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
     override val name: String = "Call graph builder"
 
     lateinit var workList: WorkList<SSAFunction>
@@ -27,7 +25,7 @@ class CallGraphBuilder(val subTypes: SubTypes) : ModulePass<CallGraph> {
             val ssaFunction = workList.get()
             ssaFunction.blocks.flatMap { it.body }.forEach {
                 if (it is SSACallSite) {
-                    callSites += processCallSite(ssaFunction, it)
+                    callSites.addIfNotNull(processCallSite(ssaFunction, it))
                 }
             }
         }
@@ -39,16 +37,19 @@ class CallGraphBuilder(val subTypes: SubTypes) : ModulePass<CallGraph> {
                 ?: error("No main in module"))
     }
 
-    private fun processCallSite(caller: SSAFunction, callSite: SSACallSite): CallSite {
+    private fun processCallSite(caller: SSAFunction, callSite: SSACallSite): CallSite? {
         val callee = callSite.callee
-        return if (callee is SSAFunction) {
-            workList.add(callee)
-            CallSite.Mono(caller, callee)
+        return if (callSite is SSAReceiverAccessor) {
+            if (callee is SSAFunction) {
+                workList.add(callee)
+                CallSite.Mono(caller, callee)
+            } else {
+                val subs = subTypes.getSubClasses(callSite.receiver.type as SSAClass)
+                val callees = subs.flatMap { it.vtable }.filter { it.type == callSite.callee.type && it.name == callSite.callee.name }.toSet()
+                CallSite.Virtual(caller, callees)
+            }
         } else {
-            val coneTop = callee.irOrigin?.dispatchReceiverParameter?.type ?: error("")
-            val subs = subTypes.getSubClasses(coneTop)
-
-            CallSite.Virtual(caller, )
+            null
         }
     }
 }
