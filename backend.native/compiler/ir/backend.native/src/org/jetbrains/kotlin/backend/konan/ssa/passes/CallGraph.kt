@@ -23,10 +23,8 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
         val callSites = mutableListOf<CallSite>()
         while (!workList.isEmpty()) {
             val ssaFunction = workList.get()
-            ssaFunction.blocks.flatMap { it.body }.forEach {
-                if (it is SSACallSite) {
-                    callSites.addIfNotNull(processCallSite(ssaFunction, it))
-                }
+            ssaFunction.blocks.flatMap { it.body }.filterIsInstance<SSACallSite>().forEach {
+                callSites.addIfNotNull(processCallSite(ssaFunction, it))
             }
         }
         return CallGraph(callSites)
@@ -45,8 +43,11 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
                 CallSite.Mono(caller, callee)
             } else {
                 val subs = subTypes.getSubClasses(callSite.receiver.type as SSAClass)
-                val callees = subs.flatMap { it.vtable }.filter { it.type == callSite.callee.type && it.name == callSite.callee.name }.toSet()
-                CallSite.Virtual(caller, callees)
+                val callees = subs
+                        .flatMap { it.vtable }
+                        .filter { it.type == callSite.callee.type && it.name == callSite.callee.name }
+                        .onEach { workList.add(it) }
+                CallSite.Virtual(caller, callees.toSet())
             }
         } else {
             null

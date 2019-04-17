@@ -19,12 +19,11 @@ class TypeConesCollector : ModulePass<TypeCones> {
                 .flatMap { it.blocks.asSequence() }
                 .flatMap { it.body.asSequence() }
                 .filterIsInstance<SSAAlloc>()
-                .forEach { alloc ->
-                    val type = alloc.type
-                    if(type is SSAClass) {
-                        type.superTypes.forEach { superType ->
-                            classHierarchy.getOrPut(superType, ::mutableListOf) += type
-                        }
+                .filter { it.type is SSAClass }
+                .map { it.type as SSAClass }
+                .forEach { type ->
+                    type.superTypes.forEach { superType ->
+                        classHierarchy.getOrPut(superType, ::mutableListOf) += type
                     }
                 }
         return TypeCones(classHierarchy)
