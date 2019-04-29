@@ -8,15 +8,21 @@ class SSAModule(val name: String, val index: SSAModuleIndex) {
     val classes = mutableListOf<SSAType>()
 }
 
-interface SSACallable {
+interface SSACallable : SSAValue {
     val name: String
-    val type: SSAFuncType
+    override val type: SSAFuncType
     val irOrigin: IrFunction?
 }
 
 interface SSAValue {
-    val users: MutableSet<SSAInstruction>
     val type: SSAType
+    val users: MutableSet<SSAInstruction>
+}
+
+// Hack: receiver for all global members
+object SSAGlobalReceiver : SSAValue {
+    override val users: MutableSet<SSAInstruction> = mutableSetOf()
+    override val type: SSAType = SSASpecialType
 }
 
 // TODO: Add receiver?
@@ -40,7 +46,7 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
 
     override val users = mutableSetOf<SSAInstruction>()
 
-    object Undef : SSAConstant(SpecialType)
+    object Undef : SSAConstant(SSASpecialType)
     object Unit : SSAConstant(SSAUnitType)
     object Null : SSAConstant(SSAAny)
 
@@ -60,6 +66,12 @@ class SSAVirtualFunction(
         override val type: SSAFuncType,
         override val irOrigin: IrFunction? = null
 ) : SSACallable
+
+class SSAIndirectFunction(
+        override val name: String,
+        override val type: SSAFuncType,
+        override val irOrigin: IrFunction? = null
+): SSACallable
 
 class SSAFunction(
         override val name: String,
@@ -124,7 +136,7 @@ class SSAEdge(
 
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 
-    override val type: SSAType = SpecialType
+    override val type: SSAType = SSASpecialType
 
     fun changeSrc(newSrc: SSABlock): SSAEdge =
             SSAEdge(newSrc, to, args)
@@ -155,7 +167,6 @@ fun SSAInstruction.isTerminal() = when (this) {
     is SSACondBr,
     is SSACatch,
     is SSAThrow,
-    is SSAInvoke,
-    is SSAMethodInvoke -> true
+    is SSAInvoke -> true
     else -> false
 }

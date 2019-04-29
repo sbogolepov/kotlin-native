@@ -63,7 +63,7 @@ class SSANOP(comment: String, owner: SSABlock) : SSAInstruction(owner) {
     init {
         this.comment = comment
     }
-    override val type: SSAType = SpecialType
+    override val type: SSAType = SSASpecialType
 }
 
 interface SSAReceiverAccessor {
@@ -78,26 +78,43 @@ sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = muta
         get() = callee.type.returnType
 
     abstract val args: List<SSAValue>
+
+    abstract val receiver: SSAValue
 }
 
-class SSACall(
+class SSAVirtualCall(
         args: List<SSAValue>,
         override val callee: SSACallable,
         owner: SSABlock,
         override val irOrigin: IrCall
 ) : SSACallSite(owner, args.toMutableList()) {
+    override val receiver: SSAValue
+        get() = operands[0]
 
     override val args: List<SSAValue>
-        get() = operands
+        get() = operands.drop(1)
 }
 
-class SSAMethodCall(
+class SSAInterfaceCall(
+        args: List<SSAValue>,
+        override val callee: SSACallable,
+        owner: SSABlock,
+        override val irOrigin: IrCall
+) : SSACallSite(owner, args.toMutableList()) {
+    override val receiver: SSAValue
+        get() = operands[0]
+
+    override val args: List<SSAValue>
+        get() = operands.drop(1)
+}
+
+class SSADirectCall(
         receiver: SSAValue,
         args: List<SSAValue>,
         override val callee: SSACallable,
         owner: SSABlock,
         override val irOrigin: IrCall
-) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())), SSAReceiverAccessor {
+) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())) {
 
     override val receiver: SSAValue
         get() = operands[0]
@@ -107,31 +124,43 @@ class SSAMethodCall(
 }
 
 class SSAInvoke(
-        args: List<SSAValue>,
-        override val callee: SSACallable,
-        val continuation: SSAEdge,
-        val exception: SSAEdge,
-        owner: SSABlock,
-        override val irOrigin: IrCall
-) : SSACallSite(owner, args.toMutableList()) {
-    override val args: List<SSAValue>
-        get() = operands
-}
-
-class SSAMethodInvoke(
         receiver: SSAValue,
         args: List<SSAValue>,
-        override val callee: SSACallable,
+        override val callee: SSAFunction,
         val continuation: SSAEdge,
         val exception: SSAEdge,
         owner: SSABlock,
         override val irOrigin: IrCall
-): SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())), SSAReceiverAccessor {
+): SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())) {
     override val receiver: SSAValue
         get() = operands[0]
 
     override val args: List<SSAValue>
         get() = operands.drop(1)
+}
+
+class SSAGetITable(
+        receiver: SSAValue,
+        owner: SSABlock,
+        val callee: SSACallable
+): SSAInstruction(owner, mutableListOf(receiver)), SSAReceiverAccessor {
+    override val receiver: SSAValue
+        get() = operands[0]
+
+    override val type: SSAType
+        get() = callee.type
+}
+
+class SSAGetVTable(
+        receiver: SSAValue,
+        owner: SSABlock,
+        val callee: SSACallable
+): SSAInstruction(owner, mutableListOf(receiver)), SSAReceiverAccessor {
+    override val receiver: SSAValue
+        get() = operands[0]
+
+    override val type: SSAType
+        get() = callee.type
 }
 
 class SSABr(val edge: SSAEdge, owner: SSABlock) : SSAInstruction(owner) {

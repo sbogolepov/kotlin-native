@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 
 interface SSAType
 
-object SpecialType : SSAType
+object SSASpecialType : SSAType
 
 object VoidType : SSAType
 

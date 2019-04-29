@@ -18,13 +18,13 @@ interface ReturnContext {
     fun emitReturn(value: SSAValue, target: IrReturnTarget): SSAValue
 }
 
-sealed class GenerationContext<T>(
+internal sealed class GenerationContext<T>(
         val builder: SSAFunctionBuilder,
         val parent: GenerationContext<*>?
 ) {
     abstract fun complete(result: T): SSAValue
 
-    class Loop(
+    internal class Loop(
             builder: SSAFunctionBuilder,
             parent: GenerationContext<*>?,
             val loop: IrLoop
@@ -229,7 +229,7 @@ sealed class GenerationContext<T>(
     }
 }
 
-inline fun <G, T: GenerationContext<G>> GenerationContext<*>.inNewContext(newContext: T, action: T.() -> G): SSAValue {
+internal inline fun <G, T: GenerationContext<G>> GenerationContext<*>.inNewContext(newContext: T, action: T.() -> G): SSAValue {
     val old = builder.generationContext
     builder.generationContext = newContext
 
@@ -238,22 +238,22 @@ inline fun <G, T: GenerationContext<G>> GenerationContext<*>.inNewContext(newCon
     return value
 }
 
-inline fun GenerationContext<*>.inWhen(irWhen: IrWhen, action: GenerationContext.When.() -> Unit): SSAValue {
+internal inline fun GenerationContext<*>.inWhen(irWhen: IrWhen, action: GenerationContext.When.() -> Unit): SSAValue {
     val whenContext = GenerationContext.When(builder, this, irWhen)
     return inNewContext(whenContext, action)
 }
 
-inline fun GenerationContext<*>.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -> Unit): SSAValue {
+internal inline fun GenerationContext<*>.inLoop(irLoop: IrLoop, action: GenerationContext.Loop.() -> Unit): SSAValue {
     val loop = GenerationContext.Loop(builder, this, irLoop)
     return inNewContext(loop, action)
 }
 
-inline fun GenerationContext<*>.inTryCatch(irTry: IrTry, action: GenerationContext.TryCatch.() -> Unit): SSAValue {
+internal inline fun GenerationContext<*>.inTryCatch(irTry: IrTry, action: GenerationContext.TryCatch.() -> Unit): SSAValue {
     val tryCatch = GenerationContext.TryCatch(builder, this, irTry)
     return inNewContext(tryCatch, action)
 }
 
-inline fun GenerationContext<*>.inReturnableBlock(
+internal inline fun GenerationContext<*>.inReturnableBlock(
         irReturnableBlock: IrReturnableBlock,
         action: GenerationContext.ReturnableBlock.() -> Unit
 ): SSAValue {
@@ -261,19 +261,19 @@ inline fun GenerationContext<*>.inReturnableBlock(
     return inNewContext(returnableBlock, action)
 }
 
-fun GenerationContext<*>?.getLoop(): LoopContext = when (this) {
+internal fun GenerationContext<*>?.getLoop(): LoopContext = when (this) {
     is LoopContext -> this
     null -> error("Cannot find parent loop")
     else -> parent.getLoop()
 }
 
-fun GenerationContext<*>?.getTryCatch(): TryCatchContext = when (this) {
+internal fun GenerationContext<*>?.getTryCatch(): TryCatchContext = when (this) {
     is TryCatchContext -> this
     null -> error("Cannot find parent try-catch")
     else -> parent.getTryCatch()
 }
 
-fun GenerationContext<*>?.getReturn(): ReturnContext = when (this) {
+internal fun GenerationContext<*>?.getReturn(): ReturnContext = when (this) {
     is ReturnContext -> this
     null -> error("Cannot find parent try-catch")
     else -> parent.getReturn()

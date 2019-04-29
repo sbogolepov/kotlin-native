@@ -39,10 +39,12 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         is SSAIncRef -> {}
         is SSADecRef -> {}
         is SSANOP -> {}
-        is SSACall -> processCallSite(insn)
-        is SSAMethodCall -> processCallSite(insn)
+        is SSADirectCall -> processCallSite(insn)
         is SSAInvoke -> processCallSite(insn)
-        is SSAMethodInvoke -> processCallSite(insn)
+        is SSAVirtualCall -> processCallSite(insn)
+        is SSAInterfaceCall -> processCallSite(insn)
+        is SSAGetITable -> {}
+        is SSAGetVTable -> {}
         is SSABr -> {}
         is SSACondBr -> {}
         is SSAReturn -> processReturn(insn)

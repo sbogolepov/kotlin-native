@@ -5,6 +5,7 @@ import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.llvm.addFunctionSignext
+import org.jetbrains.kotlin.backend.konan.ssa.SSACallable
 import org.jetbrains.kotlin.backend.konan.ssa.SSAFunction
 import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
 import org.jetbrains.kotlin.backend.konan.ssa.SSAType
@@ -49,6 +50,6 @@ internal class LLVMDeclarationsBuilder(
 }
 
 class LLVMDeclarations(
-        val functions: Map<SSAFunction, LLVMValueRef>,
+        val functions: Map<SSACallable, LLVMValueRef>,
         val types: Map<SSAType, LLVMTypeRef>
 )

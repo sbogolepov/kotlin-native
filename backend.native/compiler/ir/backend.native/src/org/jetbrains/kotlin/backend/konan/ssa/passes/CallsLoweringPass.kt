@@ -3,9 +3,10 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import kotlin.contracts.contract
 
 /**
- * To simplify translation to LLVM we can lower `SSACall` to `SSAInvoke`.
+ * To simplify translation to LLVM we can lower `SSADirectCall` to `SSAInvokeThrowing`.
  * It will lead to 1 to 1 mapping of basic blocks.
  */
 class CallsLoweringPass : FunctionPass {
@@ -44,18 +45,22 @@ class CallsLoweringPass : FunctionPass {
 
         for (insn in block.body) {
             if (shouldBeLowered(insn)) {
+                insn as SSACallSite
                 val nextBlock = SSABlock(function)
 
                 val contEdge = SSAEdge(curBlock, nextBlock)
                 val excEdge = SSAEdge(curBlock, landingPad.value)
 
-                val newCallSite = when (insn) {
-                    is SSAMethodCall ->
-                        SSAMethodInvoke(insn.receiver, insn.args, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin)
-                    is SSACall ->
-                        SSAInvoke(insn.args, insn.callee, contEdge, excEdge, curBlock, insn.irOrigin)
-                    else -> error("Unexpected call site type: $insn")
+                val callee = when (insn) {
+                    is SSAVirtualCall -> SSAGetVTable(insn.receiver, curBlock, insn.callee).also {
+                        curBlock.body += it
+                    }
+                    is SSAInterfaceCall -> SSAGetITable(insn.receiver, curBlock, insn.callee).also {
+                        curBlock.body += it
+                    }
+                    else -> insn.callee
                 }
+                val newCallSite = SSAInvoke(insn.receiver, insn.args, callee, contEdge, excEdge, curBlock, insn.irOrigin)
                 insn.replaceBy(newCallSite)
                 curBlock.body += newCallSite
                 curBlock.sealed = true

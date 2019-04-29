@@ -54,6 +54,9 @@ class SSARender {
         }
     }
 
+    private val SSAInstruction.slot: Int
+        get() = slotTracker.slot(this)
+
     private fun render(block: SSABlock): String = buildString {
         appendln("block ${renderBlock(block)}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }}):")
         pad = padDelta
@@ -63,30 +66,33 @@ class SSARender {
         pad = ""
     }
 
+    private fun renderInsnResult(insn: SSAInstruction) = "%${insn.slot} ${renderType(insn.type)}"
+
     private fun render(insn: SSAInstruction): String = buildString {
-        val track = slotTracker.slot(insn)
         append("$pad ")
         append(when (insn) {
             is SSACallSite -> renderCallSite(insn)
             is SSACatch ->      "catch"
-            is SSAAlloc ->      "%$track: ${renderType(insn.type)} = allocate"
-            is SSAGetField ->   "%$track: ${renderType(insn.type)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}"
-            is SSANOP ->        "%$track: ${renderType(insn.type)} = NOP \"${insn.comment}\""
-            is SSAGetObjectValue -> "%$track ${renderType(insn.type)} = GET OBJECT VALUE"
-            is SSAReturn ->     "ret ${if (insn.retVal != null) renderOperand(insn.retVal!!) else ""}"
-            is SSABr ->         "br ${renderOperand(insn.edge)}"
-            is SSACondBr ->     "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
-            is SSASetField -> "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"
-            is SSADeclare -> "%$track: ${renderType(insn.type)} = declare ${insn.name} ${renderOperand(insn.value)}"
+            is SSAAlloc ->          "${renderInsnResult(insn)} = allocate"
+            is SSAGetField ->       "${renderInsnResult(insn)} = (${renderOperand(insn.receiver)}).${renderOperand(insn.field)}"
+            is SSANOP ->            "${renderInsnResult(insn)} = NOP \"${insn.comment}\""
+            is SSAGetObjectValue -> "${renderInsnResult(insn)} = GET_OBJECT_VALUE"
+            is SSAReturn ->         "ret ${if (insn.retVal != null) renderOperand(insn.retVal!!) else ""}"
+            is SSABr ->             "br ${renderOperand(insn.edge)}"
+            is SSACondBr ->         "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
+            is SSASetField ->       "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"
+            is SSADeclare ->        "${renderInsnResult(insn)} = declare ${insn.name} ${renderOperand(insn.value)}"
             is SSAIncRef -> TODO()
             is SSADecRef -> TODO()
-            is SSAInstanceOf -> "%$track: ${renderType(insn.type)} = ${renderOperand(insn.value)} is ${renderType(insn.typeOperand)}"
-            is SSANot -> "%$track: ${renderType(insn.type)} = not ${renderOperand(insn.value)}"
-            is SSACast -> "%$track: ${renderType(insn.type)} = cast ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
-            is SSAIntegerCoercion -> "%$track: ${renderType(insn.type)} = coerce ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
-            is SSAGetGlobal -> "%$track: ${renderType(insn.type)} = get global ${renderOperand(insn.global)}"
-            is SSASetGlobal -> "set global ${renderOperand(insn.global)} to ${renderOperand(insn.value)}"
-            is SSAThrow -> "throw ${renderOperand(insn.edge)}"
+            is SSAInstanceOf ->     "${renderInsnResult(insn)} = ${renderOperand(insn.value)} is ${renderType(insn.typeOperand)}"
+            is SSANot ->            "${renderInsnResult(insn)} = not ${renderOperand(insn.value)}"
+            is SSACast ->           "${renderInsnResult(insn)} = cast ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
+            is SSAIntegerCoercion -> "${renderInsnResult(insn)} = coerce ${renderOperand(insn.value)} to ${renderType(insn.typeOperand)}"
+            is SSAGetGlobal ->      "${renderInsnResult(insn)} = get_global ${renderOperand(insn.global)}"
+            is SSASetGlobal ->      "set_global ${renderOperand(insn.global)} to ${renderOperand(insn.value)}"
+            is SSAThrow ->          "throw ${renderOperand(insn.edge)}"
+            is SSAGetITable -> "${renderInsnResult(insn)} = itable ${renderOperand(insn.receiver)} ${insn.callee.name}"
+            is SSAGetVTable -> "${renderInsnResult(insn)} = vtable ${renderOperand(insn.receiver)} ${insn.callee.name}"
         })
         insn.comment?.let {
             append("\t\t #$it")
@@ -94,11 +100,14 @@ class SSARender {
     }
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {
-        val track = slotTracker.slot(insn)
+        fun renderCallSiteArgs(insn: SSACallSite) =
+                "${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
+
         append(when (insn) {
-            is SSACall, is SSAMethodCall -> "%$track: ${renderType(insn.type)} = call ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
-            is SSAInvoke -> "%$track: ${renderType(insn.type)} = invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
-            is SSAMethodInvoke -> "%$track: ${renderType(insn.type)} = invoke ${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
+            is SSAInvoke ->   "${renderInsnResult(insn)} = invoke ${renderCallSiteArgs(insn)} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"
+            is SSAVirtualCall ->            "${renderInsnResult(insn)} = call_virtual ${renderCallSiteArgs(insn)}"
+            is SSAInterfaceCall ->          "${renderInsnResult(insn)} = call_interface ${renderCallSiteArgs(insn)}"
+            is SSADirectCall ->             "${renderInsnResult(insn)} = call_direct ${renderCallSiteArgs(insn)}"
         })
     }
 

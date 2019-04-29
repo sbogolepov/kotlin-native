@@ -2,7 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 
-interface SSAFunctionBuilder {
+internal interface SSAFunctionBuilder {
 
     val function: SSAFunction
 
@@ -35,7 +35,7 @@ interface SSAFunctionBuilder {
     fun getNothing(): SSAValue
 }
 
-inline fun SSAFunctionBuilder.appendingTo(block: SSABlock, code: () -> Unit) {
+internal inline fun SSAFunctionBuilder.appendingTo(block: SSABlock, code: () -> Unit) {
     val old = curBlock
     curBlock = block
     code()

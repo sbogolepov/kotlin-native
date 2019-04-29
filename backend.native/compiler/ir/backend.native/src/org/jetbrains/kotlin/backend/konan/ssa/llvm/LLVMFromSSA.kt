@@ -2,16 +2,12 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonFunction
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.Runtime
-import org.jetbrains.kotlin.backend.konan.llvm.isFloatingPoint
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
-import org.jetbrains.kotlin.backend.konan.llvm.type
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.expressions.IrCall
 
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
@@ -123,6 +119,7 @@ private class LLVMFunctionFromSSA(
         is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
         is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
         is SSAConstant.String -> codegen.emitStringConst(value.value)
+        SSAConstant.Unit -> TODO()
     }
 
     private fun emitInstruction(insn: SSAInstruction): LLVMValueRef = when (insn) {
@@ -146,6 +143,16 @@ private class LLVMFunctionFromSSA(
         is SSACast -> emitCast(insn)
         is SSAIntegerCoercion -> emitIntegerCoercion(insn)
         is SSANot -> emitNot(insn)
+        is SSAGetITable -> emitGetITable(insn)
+        is SSAGetVTable -> emitGetVTable(insn)
+    }
+
+    private fun emitGetVTable(insn: SSAGetVTable): LLVMValueRef {
+        TODO("not implemented")
+    }
+
+    private fun emitGetITable(insn: SSAGetITable): LLVMValueRef {
+        TODO("not implemented")
     }
 
     private fun emitNot(insn: SSANot): LLVMValueRef =
@@ -217,10 +224,10 @@ private class LLVMFunctionFromSSA(
                 intrinsicGenerator.evaluateCall(callSite, args)
             }
             else -> when (callSite) {
-                is SSACall -> emitCall(callSite)
-                is SSAInvoke -> emitInvoke(callSite)
-                is SSAMethodCall -> emitMethodCall(callSite)
-                is SSAMethodInvoke -> emitMethodInvoke(callSite)
+                is SSAInvoke -> emitMethodInvoke(callSite)
+                is SSADirectCall -> emitMethodCall(callSite)
+                is SSAVirtualCall -> error("Should be lowered")
+                is SSAInterfaceCall -> error("Should be lowered")
             }
         }
     }
@@ -233,22 +240,22 @@ private class LLVMFunctionFromSSA(
             return when {
                 functionSymbol == ib.eqeqeqSymbol -> icmpEq(args[0], args[1])
                 functionSymbol == ib.booleanNotSymbol -> icmpNe(args[0], constTrue)
-                functionSymbol.isComparisonFunction(ib.greaterFunByOperandType) -> {
-                    if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
-                    else icmpGt(args[0], args[1])
-                }
-                functionSymbol.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
-                    if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
-                    else icmpGe(args[0], args[1])
-                }
-                functionSymbol.isComparisonFunction(ib.lessFunByOperandType) -> {
-                    if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
-                    else icmpLt(args[0], args[1])
-                }
-                functionSymbol.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
-                    if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
-                    else icmpLe(args[0], args[1])
-                }
+//                functionSymbol.isComparisonFunction(ib.greaterFunByOperandType) -> {
+//                    if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
+//                    else icmpGt(args[0], args[1])
+//                }
+//                functionSymbol.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
+//                    if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
+//                    else icmpGe(args[0], args[1])
+//                }
+//                functionSymbol.isComparisonFunction(ib.lessFunByOperandType) -> {
+//                    if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
+//                    else icmpLt(args[0], args[1])
+//                }
+//                functionSymbol.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
+//                    if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
+//                    else icmpLe(args[0], args[1])
+//                }
                 else -> error(function.name.toString())
             }
         }
@@ -280,29 +287,13 @@ private class LLVMFunctionFromSSA(
         return codegen.ret(retval)
     }
 
-    private fun emitCall(insn: SSACall): LLVMValueRef {
+    private fun emitMethodCall(insn: SSADirectCall): LLVMValueRef {
         val callee = llvmDeclarations.functions.getValue(insn.callee)
         val args = insn.operands.map { emitValue(it) }
         return codegen.call(callee, args)
     }
 
-    private fun emitMethodCall(insn: SSAMethodCall): LLVMValueRef {
-        val callee = llvmDeclarations.functions.getValue(insn.callee)
-        val args = insn.operands.map { emitValue(it) }
-        return codegen.call(callee, args)
-    }
-
-    private fun emitInvoke(insn: SSAInvoke): LLVMValueRef {
-        val callee = llvmDeclarations.functions.getValue(insn.callee)
-        val args = insn.operands.map { emitValue(it) }
-        mapArgsToPhis(insn.continuation)
-        mapArgsToPhis(insn.exception)
-        val thenBlock = blocksMap.getValue(insn.continuation.to)
-        val catchBlock = blocksMap.getValue(insn.exception.to)
-        return codegen.invoke(callee, args, thenBlock, catchBlock)
-    }
-
-    private fun emitMethodInvoke(insn: SSAMethodInvoke): LLVMValueRef {
+    private fun emitMethodInvoke(insn: SSAInvoke): LLVMValueRef {
         val callee = llvmDeclarations.functions.getValue(insn.callee)
         val args = insn.operands.map { emitValue(it) }
         mapArgsToPhis(insn.continuation)

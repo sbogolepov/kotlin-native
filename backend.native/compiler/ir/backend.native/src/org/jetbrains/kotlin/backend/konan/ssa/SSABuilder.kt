@@ -2,12 +2,14 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.backend.common.ir.ir2string
 import org.jetbrains.kotlin.backend.konan.ir.constructedClass
+import org.jetbrains.kotlin.backend.konan.ir.isOverridable
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArguments
+import org.jetbrains.kotlin.ir.util.isInterface
 
 
 private const val DEBUG = true
@@ -424,11 +426,15 @@ internal class SSAFunctionBuilderImpl(
 
         val callee = declMapper.mapFunction(irCall.symbol.owner)
 
-        return if (irCall.dispatchReceiver != null) {
-            val receiver = args[0]
-            +SSAMethodCall(receiver, args.drop(1), callee, curBlock, irCall)
+        val dispatchReceiver = irCall.dispatchReceiver
+        return if (dispatchReceiver != null) {
+            when {
+                dispatchReceiver.type.isInterface() -> +SSAInterfaceCall(args, callee, curBlock, irCall)
+                function is IrSimpleFunction && function.isOverridable -> +SSAVirtualCall(args, callee, curBlock, irCall)
+                else -> +SSADirectCall(args[0], args.drop(1), callee, curBlock, irCall)
+            }
         } else {
-            +SSACall(args, callee, curBlock, irCall)
+            +SSADirectCall(SSAGlobalReceiver, args, callee, curBlock, irCall)
         }
     }
 
@@ -444,7 +450,7 @@ internal class SSAFunctionBuilderImpl(
         }
 
         val callee = declMapper.mapFunction(constructor)
-        +SSAMethodCall(allocationSite, args, callee, curBlock, irCall)
+        +SSADirectCall(allocationSite, args, callee, curBlock, irCall)
         return allocationSite
     }
 

@@ -10,7 +10,7 @@ class InlineAccessorsPass : FunctionPass {
         for (bb in function.blocks) {
             for (insn in bb.body) {
                 // TODO: better filter
-                if (insn is SSAMethodCall && insn.callee is SSAFunction && insn.callee.isTrivialGetter()) {
+                if (insn is SSADirectCall && insn.callee is SSAFunction && insn.callee.isTrivialGetter()) {
                     val getter = insn.callee.blocks[0].body[0] as SSAGetField
                     val replacement = SSAGetField(insn.receiver, getter.field, insn.owner)
                     val idx = bb.body.indexOf(insn)
