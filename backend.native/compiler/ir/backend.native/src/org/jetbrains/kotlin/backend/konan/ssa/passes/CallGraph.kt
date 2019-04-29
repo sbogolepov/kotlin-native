@@ -9,8 +9,7 @@ sealed class CallSite(val caller: SSAFunction, val callees: Set<SSAFunction>) {
     class Virtual(caller: SSAFunction, callees: Set<SSAFunction>) : CallSite(caller, callees)
 }
 
-
-class CallGraph(val callSites: List<CallSite>)
+class CallGraph(val callSites: Map<SSAFunction, Set<CallSite>>)
 
 class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
     override val name: String = "Call graph builder"
@@ -20,14 +19,16 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
     override fun apply(module: SSAModule): CallGraph {
         val roots = findRoots(module)
         workList = WorkList(roots)
-        val callSites = mutableListOf<CallSite>()
+        val results = mutableMapOf<SSAFunction, MutableSet<CallSite>>()
         while (!workList.isEmpty()) {
             val ssaFunction = workList.get()
+            val callSites = mutableSetOf<CallSite>()
             ssaFunction.blocks.flatMap { it.body }.filterIsInstance<SSACallSite>().forEach {
                 callSites.addIfNotNull(processCallSite(ssaFunction, it))
             }
+            results[ssaFunction] = callSites
         }
-        return CallGraph(callSites)
+        return CallGraph(results)
     }
 
     private fun findRoots(module: SSAModule): List<SSAFunction> {
