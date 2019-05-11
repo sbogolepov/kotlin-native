@@ -19,6 +19,8 @@ class GlobalConnectionGraphState {
     val methodToCallerActualsAndGlobals = mutableMapOf<SSAFunction, List<CGReferenceNode>>()
 
     val nodeToCg = mutableMapOf<SSAValue, CGNode>()
+
+    val callerActualsAndGlobals = mutableListOf<CGReferenceNode>()
 }
 
 class ConnectionGraphBuilder(val function: SSAFunction) {
@@ -50,13 +52,13 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
 
     private fun processInsn(insn: SSAInstruction): Unit = when (insn) {
         is SSADeclare -> TODO()
-        is SSAIncRef -> TODO()
-        is SSADecRef -> TODO()
-        is SSANOP -> TODO()
-        is SSAVirtualCall -> TODO()
-        is SSAInterfaceCall -> TODO()
-        is SSADirectCall -> TODO()
-        is SSAInvoke -> TODO()
+        is SSAIncRef -> {}
+        is SSADecRef -> {}
+        is SSANOP -> {}
+        is SSAVirtualCall -> handleCallSite(insn)
+        is SSAInterfaceCall -> handleCallSite(insn)
+        is SSADirectCall -> handleCallSite(insn)
+        is SSAInvoke -> handleCallSite(insn)
         is SSAGetITable -> TODO()
         is SSAGetVTable -> TODO()
         is SSABr -> TODO()
@@ -64,9 +66,9 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         is SSAReturn -> TODO()
         is SSAAlloc -> handleAlloc(insn)
         is SSAGetField -> handleGetField(insn)
-        is SSASetField -> TODO()
-        is SSAGetGlobal -> TODO()
-        is SSASetGlobal -> TODO()
+        is SSASetField -> handleSetField(insn)
+        is SSAGetGlobal -> handleGetGlobal(insn)
+        is SSASetGlobal -> handleSetGlobal(insn)
         is SSAGetObjectValue -> TODO()
         is SSACatch -> TODO()
         is SSAInstanceOf -> TODO()
@@ -74,6 +76,14 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         is SSAIntegerCoercion -> TODO()
         is SSANot -> TODO()
         is SSAThrow -> TODO()
+    }
+
+    private fun handleCallSite(insn: SSACallSite) {
+        val actualArguments = CGReferenceNode.getArgumentActualReferences(insn, state.nodeToCg, state.callerActualsAndGlobals)
+        if (insn.callee.type.returnType !is ReferenceType) {
+            return
+        }
+        state.nodeToCg[insn] = actualArguments[0]
     }
 
     private fun handleGetField(insn: SSAGetField) {
@@ -85,13 +95,47 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
 
         val base = state.nodeToCg[insn.receiver] as? CGReferenceNode ?: error("Receiver is not processed.")
 
-        val pointsTo = mutableSetOf(*base.pointsTo.toTypedArray())
+        val pointsTo = base.pointsTo.toMutableSet()
         if (pointsTo.isEmpty()) {
             pointsTo += CGObjectNode.getPhantomNodeForReference(base)
         }
         pointsTo.forEach { objectNode ->
             objectNode.getFieldReferenceFor(insn.field).attachTo(localReference)
         }
+    }
+
+    private fun handleSetField(setField: SSASetField) {
+        val field = setField.field
+        if (field.type !is ReferenceType) {
+            return
+        }
+        val base = state.nodeToCg[setField.receiver] as? CGReferenceNode ?: error("Receiver is not processed.")
+        val valueNode = state.nodeToCg[setField.value] ?: error("Field value is not processed.")
+
+        val pointsTo = base.pointsTo.toMutableSet()
+        if (pointsTo.isEmpty()) {
+            pointsTo += CGObjectNode.getPhantomNodeForReference(base)
+        }
+        pointsTo.forEach { objectNode ->
+            valueNode.attachTo(objectNode.getFieldReferenceFor(field))
+        }
+    }
+
+    private fun handleGetGlobal(getGlobal: SSAGetGlobal) {
+        if (getGlobal.global.type !is ReferenceType) {
+            return
+        }
+        state.nodeToCg[getGlobal] = CGReferenceNode.getGlobalReferenceNode(getGlobal.global, state.callerActualsAndGlobals)
+    }
+
+    private fun handleSetGlobal(setGlobal: SSASetGlobal) {
+        if (setGlobal.global.type !is ReferenceType) {
+            return
+        }
+        val global = CGReferenceNode.getGlobalReferenceNode(setGlobal.global, state.callerActualsAndGlobals)
+        val valueNode = state.nodeToCg[setGlobal.value] ?: error("Global value is not processed.")
+
+        valueNode.attachTo(global)
     }
 
     private fun handleAlloc(insn: SSAAlloc) {

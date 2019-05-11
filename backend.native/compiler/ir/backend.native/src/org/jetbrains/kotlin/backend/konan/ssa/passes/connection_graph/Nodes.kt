@@ -32,7 +32,8 @@ fun CGNode.updateEscapeState(newState: EscapeState) {
                 descendants.forEach { it.updateEscapeState(newState) }
             }
         }
-        EscapeState.Local -> {}
+        EscapeState.Local -> {
+        }
     }
 }
 
@@ -74,7 +75,7 @@ sealed class CGObjectNode : CGNode {
     }
 
     fun getFieldReferenceFor(field: SSAField): CGReferenceNode.Field =
-        fieldToFieldReference.getOrPut(field) { CGReferenceNode.Field(this, field) }.also { addField(it) }
+            fieldToFieldReference.getOrPut(field) { CGReferenceNode.Field(this, field) }.also { addField(it) }
 
     class Constant : CGObjectNode()
 
@@ -92,12 +93,29 @@ sealed class CGReferenceNode : CGNode {
     companion object {
         private val nodeToLocalReference = mutableMapOf<SSAValue, Local>()
         private val referenceNodeList = mutableListOf<CGReferenceNode>()
+        private val fieldToGlobalReference = mutableMapOf<SSAField, Global>()
+        private val invocationToActualReference = mutableMapOf<SSACallSite, MutableList<Actual>>()
 
         fun getLocalReferenceNode(value: SSAValue): Local =
-            nodeToLocalReference.getOrPut(value) { Local(value) }.also {
-                referenceNodeList += it
-            }
+                nodeToLocalReference.getOrPut(value) { Local(value) }.also {
+                    referenceNodeList += it
+                }
 
+        fun getGlobalReferenceNode(field: SSAField, callerActualsAndGlobals: MutableList<CGReferenceNode>): Global {
+            val global = fieldToGlobalReference.getOrPut(field) { Global(field) }
+            callerActualsAndGlobals += global
+            global.updateEscapeState(EscapeState.Global)
+            return global
+        }
+
+        fun getArgumentActualReferences(ssaCallSite: SSACallSite, nodeToCg: MutableMap<SSAValue, CGNode>, callerActualsAndGlobals: MutableList<CGReferenceNode>): List<Actual> =
+            invocationToActualReference.getOrPut(ssaCallSite) {
+                val resultLength = ssaCallSite.args.size + 1
+
+                val actualArguments = mutableListOf<Actual>()
+
+                actualArguments
+            }
     }
 
     override var escapeState: EscapeState = EscapeState.Local
@@ -139,7 +157,7 @@ sealed class CGReferenceNode : CGNode {
         }
     }
 
-    class Global : CGReferenceNode()
+    class Global(val field: SSAField) : CGReferenceNode()
 
     sealed class Actual : CGReferenceNode() {
         class Return : Actual() {
@@ -147,6 +165,7 @@ sealed class CGReferenceNode : CGNode {
                 updateEscapeState(EscapeState.Method)
             }
         }
+
         class Parameter(val param: SSAFuncArgument) : Actual() {
             init {
                 updateEscapeState(EscapeState.Method)
