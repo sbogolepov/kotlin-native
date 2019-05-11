@@ -8,9 +8,9 @@ class SSAModule(val name: String, val index: SSAModuleIndex) {
     val classes = mutableListOf<SSAType>()
 }
 
-interface SSACallable : SSAValue {
+interface SSACallable {
     val name: String
-    override val type: SSAFuncType
+    val type: SSAFuncType
     val irOrigin: IrFunction?
 }
 
@@ -61,17 +61,16 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     class String(val value: kotlin.String) : SSAConstant(SSAStringType)
 }
 
+class SSACallablePtr(val callable: SSACallable) : SSAValue {
+    override val type: SSAType = callable.type
+    override val users = mutableSetOf<SSAInstruction>()
+}
+
 class SSAVirtualFunction(
         override val name: String,
         override val type: SSAFuncType,
         override val irOrigin: IrFunction? = null
 ) : SSACallable
-
-class SSAIndirectFunction(
-        override val name: String,
-        override val type: SSAFuncType,
-        override val irOrigin: IrFunction? = null
-): SSACallable
 
 class SSAFunction(
         override val name: String,

@@ -32,6 +32,9 @@ internal class SSATypeMapper(val context: Context) {
             irType.isString() -> SSAStringType
             irType.classifierOrNull != null -> {
                 val classifier = irType.getClass()!!
+                if (irType.isAny()) {
+
+                }
                 createClass(classifier)
             }
             else -> SSAWrapperType(irType)
@@ -46,6 +49,7 @@ internal class SSATypeMapper(val context: Context) {
         val isAbstact = irClass.isAbstract()
         val isFinal = irClass.isFinalClass
         val superTypes = irClass.superTypes.map { mapClass(it.getClass()!!) }
+        // TODO: Use pass over SSA instead
         val (vtable, itable) = if (!isAbstact) {
             val vtableBuilder = context.getVtableBuilder(irClass)
             val vtable = vtableBuilder.vtableEntries.map { mapFunction(it.getImplementation(context)!!) }
