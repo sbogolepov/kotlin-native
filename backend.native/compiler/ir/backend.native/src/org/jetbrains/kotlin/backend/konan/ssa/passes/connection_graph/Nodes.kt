@@ -46,6 +46,8 @@ sealed class CGObjectNode : CGNode {
 
         private val fieldToFieldReference = mutableMapOf<SSAField, CGReferenceNode.Field>()
 
+        private val constantToObject = mutableMapOf<SSAConstant, Constant>()
+
         fun getObjectNodeForAllocation(allocSite: SSAAlloc, function: SSAFunction): Object =
                 allocationToObject.getOrPut(allocSite, function) { Object(allocSite) }
 
@@ -55,6 +57,9 @@ sealed class CGObjectNode : CGNode {
                 } else {
                     reference.defferedEdges.flatMap { getPhantomNodeForReference(it) }
                 }
+
+        fun getObjectNodeForConstant(constant: SSAConstant): Constant =
+                constantToObject.getOrPut(constant) { Constant(constant) }
     }
 
     val fields: MutableList<CGReferenceNode.Field> = mutableListOf()
@@ -77,11 +82,11 @@ sealed class CGObjectNode : CGNode {
     fun getFieldReferenceFor(field: SSAField): CGReferenceNode.Field =
             fieldToFieldReference.getOrPut(field) { CGReferenceNode.Field(this, field) }.also { addField(it) }
 
-    class Constant : CGObjectNode()
+    class Constant(val constant: SSAConstant) : CGObjectNode()
 
     class Phantom(val reference: CGReferenceNode) : CGObjectNode() {
         init {
-
+            attachTo(reference)
         }
     }
 
@@ -94,7 +99,8 @@ sealed class CGReferenceNode : CGNode {
         private val nodeToLocalReference = mutableMapOf<SSAValue, Local>()
         private val referenceNodeList = mutableListOf<CGReferenceNode>()
         private val fieldToGlobalReference = mutableMapOf<SSAField, Global>()
-        private val invocationToActualReference = mutableMapOf<SSACallSite, MutableList<Actual>>()
+        private val invocationToActualReference = mutableMapOf<SSACallSite, Pair<Actual.CallReturn?, List<Actual.CallParameter>>>()
+        private val invocationToReturn = mutableMapOf<SSACallSite, Actual.CallReturn>()
 
         fun getLocalReferenceNode(value: SSAValue): Local =
                 nodeToLocalReference.getOrPut(value) { Local(value) }.also {
@@ -108,14 +114,31 @@ sealed class CGReferenceNode : CGNode {
             return global
         }
 
-        fun getArgumentActualReferences(ssaCallSite: SSACallSite, nodeToCg: MutableMap<SSAValue, CGNode>, callerActualsAndGlobals: MutableList<CGReferenceNode>): List<Actual> =
-            invocationToActualReference.getOrPut(ssaCallSite) {
-                val resultLength = ssaCallSite.args.size + 1
+        // TODO: revisit me
+        fun getArgumentActualReferences(
+                callSite: SSACallSite,
+                nodeToCg: MutableMap<SSAValue, CGNode>,
+                callerActualsAndGlobals: MutableList<CGReferenceNode>
+        ): Pair<Actual.CallReturn?, List<Actual.CallParameter>> =
+                invocationToActualReference.getOrPut(callSite) {
+                    val returnNode = if (callSite.callee.type.returnType is ReferenceType) {
+                        invocationToReturn
+                                .getOrPut(callSite) { Actual.CallReturn(callSite) }
+                                .also { callerActualsAndGlobals += it }
+                    } else {
+                        null
+                    }
+                    val argNodes = callSite.operands.withIndex()
+                            .filter { (_, it) -> it.type is ReferenceType }
+                            .map { (index, param) ->
+                                Actual.CallParameter(callSite, index, param).also {
+                                    callerActualsAndGlobals += it
+                                    nodeToCg[param]?.attachTo(it)
+                                }
+                            }
 
-                val actualArguments = mutableListOf<Actual>()
-
-                actualArguments
-            }
+                    returnNode to argNodes
+                }
     }
 
     override var escapeState: EscapeState = EscapeState.Local
@@ -159,14 +182,18 @@ sealed class CGReferenceNode : CGNode {
 
     class Global(val field: SSAField) : CGReferenceNode()
 
-    sealed class Actual : CGReferenceNode() {
+    sealed class Actual() : CGReferenceNode() {
         class Return : Actual() {
             init {
                 updateEscapeState(EscapeState.Method)
             }
         }
 
-        class Parameter(val param: SSAFuncArgument) : Actual() {
+        class CallReturn(val callSite: SSACallSite) : Actual()
+
+        class CallParameter(val callSite: SSACallSite, val index: Int, val value: SSAValue) : Actual()
+
+        class FormalParameter(val param: SSAFuncArgument) : Actual() {
             init {
                 updateEscapeState(EscapeState.Method)
             }

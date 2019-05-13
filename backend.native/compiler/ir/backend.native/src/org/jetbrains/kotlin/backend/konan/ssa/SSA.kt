@@ -25,6 +25,8 @@ object SSAGlobalReceiver : SSAValue {
     override val type: SSAType = SSASpecialType
 }
 
+fun SSACallSite.isMethod() = receiver != SSAGlobalReceiver
+
 // TODO: Add receiver?
 class SSAField(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
@@ -59,11 +61,6 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
     class Float(val value: kotlin.Float) : SSAConstant(SSAPrimitiveType.FLOAT)
     class Double(val value: kotlin.Double) : SSAConstant(SSAPrimitiveType.DOUBLE)
     class String(val value: kotlin.String) : SSAConstant(SSAStringType)
-}
-
-class SSACallablePtr(val callable: SSACallable) : SSAValue {
-    override val type: SSAType = callable.type
-    override val users = mutableSetOf<SSAInstruction>()
 }
 
 class SSAVirtualFunction(
@@ -132,13 +129,9 @@ class SSAEdge(
         from.succs += this
         to.preds += this
     }
-
     override val users: MutableSet<SSAInstruction> = mutableSetOf()
 
     override val type: SSAType = SSASpecialType
-
-    fun changeSrc(newSrc: SSABlock): SSAEdge =
-            SSAEdge(newSrc, to, args)
 }
 
 class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple()) : SSAValue {
@@ -152,12 +145,11 @@ class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple())
     val succs = mutableSetOf<SSAEdge>()
     val preds = mutableSetOf<SSAEdge>()
     var sealed: Boolean = false
+}
 
-    fun replaceWith(newBlock: SSABlock) {
-        for (pred in preds) {
-            pred.to = newBlock
-        }
-    }
+fun SSABlockParam.getIncomingValues(): Set<SSAValue> {
+    val index = owner.params.indexOf(this)
+    return owner.succs.map { it.args[index] }.toSet()
 }
 
 fun SSAInstruction.isTerminal() = when (this) {

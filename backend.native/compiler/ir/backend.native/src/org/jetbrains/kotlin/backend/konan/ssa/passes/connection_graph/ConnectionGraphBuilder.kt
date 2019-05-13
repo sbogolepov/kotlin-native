@@ -36,7 +36,7 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         }
         for (param in function.params) {
             if (param.type is ReferenceType) {
-                CGReferenceNode.Actual.Parameter(param)
+                CGReferenceNode.Actual.FormalParameter(param)
             }
         }
         val iter = workingList.iterator()
@@ -47,35 +47,65 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         }
     }
 
-    private fun processBlock(block: SSABlock) =
-            block.body.forEach(::processInsn)
+    private fun processBlock(block: SSABlock) {
+        block.params.filter { it.type is ReferenceType }.forEach { param ->
+            val localRef = CGReferenceNode.getLocalReferenceNode(param)
+            state.nodeToCg[param] = localRef
+            param.getIncomingValues().forEach { state.nodeToCg[it]?.attachTo(localRef) }
+        }
 
-    private fun processInsn(insn: SSAInstruction): Unit = when (insn) {
-        is SSADeclare -> TODO()
-        is SSAIncRef -> {}
-        is SSADecRef -> {}
-        is SSANOP -> {}
-        is SSAVirtualCall -> handleCallSite(insn)
-        is SSAInterfaceCall -> handleCallSite(insn)
-        is SSADirectCall -> handleCallSite(insn)
-        is SSAInvoke -> handleCallSite(insn)
-        is SSAGetITable -> TODO()
-        is SSAGetVTable -> TODO()
-        is SSABr -> TODO()
-        is SSACondBr -> TODO()
-        is SSAReturn -> TODO()
-        is SSAAlloc -> handleAlloc(insn)
-        is SSAGetField -> handleGetField(insn)
-        is SSASetField -> handleSetField(insn)
-        is SSAGetGlobal -> handleGetGlobal(insn)
-        is SSASetGlobal -> handleSetGlobal(insn)
-        is SSAGetObjectValue -> TODO()
-        is SSACatch -> TODO()
-        is SSAInstanceOf -> TODO()
-        is SSACast -> TODO()
-        is SSAIntegerCoercion -> TODO()
-        is SSANot -> TODO()
-        is SSAThrow -> TODO()
+        block.body.forEach(::processInsn)
+    }
+
+    private fun processInsn(insn: SSAInstruction) {
+        handleOperands(insn)
+        return when (insn) {
+            is SSADeclare -> TODO()
+            is SSAIncRef -> {}
+            is SSADecRef -> {}
+            is SSANOP -> {}
+            is SSAVirtualCall -> handleCallSite(insn)
+            is SSAInterfaceCall -> handleCallSite(insn)
+            is SSADirectCall -> handleCallSite(insn)
+            is SSAInvoke -> handleCallSite(insn)
+            is SSAGetITable -> {}
+            is SSAGetVTable -> {}
+            is SSABr -> {}
+            is SSACondBr -> {}
+            is SSAReturn -> handleReturn(insn)
+            is SSAAlloc -> handleAlloc(insn)
+            is SSAGetField -> handleGetField(insn)
+            is SSASetField -> handleSetField(insn)
+            is SSAGetGlobal -> handleGetGlobal(insn)
+            is SSASetGlobal -> handleSetGlobal(insn)
+            is SSAGetObjectValue -> {}
+            is SSACatch -> {}
+            is SSAInstanceOf -> {}
+            is SSACast -> handleCast(insn)
+            is SSAIntegerCoercion -> {}
+            is SSANot -> {}
+            is SSAThrow -> handleThrow(insn)
+        }
+    }
+
+    private fun handleOperands(insn: SSAInstruction) {
+        insn.operands.filterIsInstance<SSAConstant>().filter { it.type is ReferenceType }.forEach {
+            state.nodeToCg[it] = CGObjectNode.getObjectNodeForConstant(it)
+        }
+    }
+
+    private fun handleReturn(ret: SSAReturn) {
+
+    }
+
+    private fun handleThrow(throwInsn: SSAThrow) {
+        throwInsn.edge.args.filter { it.type is ReferenceType }.forEach {
+            state.nodeToCg[it]?.updateEscapeState(EscapeState.Global) ?: error("zzz")
+        }
+    }
+
+    private fun handleCast(cast: SSACast) {
+        state.nodeToCg[cast] = state.nodeToCg[cast.value] ?: error("zzz")
     }
 
     private fun handleCallSite(insn: SSACallSite) {
@@ -83,7 +113,7 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         if (insn.callee.type.returnType !is ReferenceType) {
             return
         }
-        state.nodeToCg[insn] = actualArguments[0]
+        actualArguments.first?.let { state.nodeToCg[insn] = it }
     }
 
     private fun handleGetField(insn: SSAGetField) {
