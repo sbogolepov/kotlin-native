@@ -7,9 +7,10 @@ import org.jetbrains.kotlin.backend.common.phaser.then
 import org.jetbrains.kotlin.backend.konan.llvm.createLlvmDeclarations
 import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
-import org.jetbrains.kotlin.backend.konan.ssa.passes.CallsLoweringPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.UnitReturnsLoweringPass
+import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilder
+import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilderPass
 
 private val ssaGenerationPhase = makeKonanModuleOpPhase(
         name = "IrToSsa",
@@ -27,7 +28,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
             val passes = listOf(
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
-                    CallsLoweringPass()
+                    ConnectionGraphBuilderPass()
             )
             passes.forEach { pass ->
                 context.ssaModule.functions.forEach {

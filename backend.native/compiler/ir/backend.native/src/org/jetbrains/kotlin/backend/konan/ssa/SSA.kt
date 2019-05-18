@@ -80,6 +80,12 @@ class SSAFunction(
     val blocks = mutableListOf(entry)
     val params = mutableListOf<SSAFuncArgument>()
     val metadata = mutableListOf<String>()
+
+    val returnBlock: SSABlock by lazy {
+        SSABlock(this, SSABlockId.Simple("return_block")).also {
+            blocks += it
+        }
+    }
 }
 
 val SSAFunction.topSortedBlocks: List<SSABlock>

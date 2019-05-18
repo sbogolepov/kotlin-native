@@ -37,7 +37,6 @@ internal class SSAFunctionBuilderImpl(
 
     var blockIdGen = SSABlockIdGenerator()
 
-
     override var curBlock = function.entry
 
     override fun SSABlock.addParam(type: SSAType): SSABlockParam =

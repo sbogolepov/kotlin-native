@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 
 private const val padDelta = " "
 
-class SSARender {
+class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     fun render(module: SSAModule): String = buildString {
         appendln("--- imports")
@@ -69,6 +69,12 @@ class SSARender {
     private fun renderInsnResult(insn: SSAInstruction) = "%${insn.slot} ${renderType(insn.type)}"
 
     private fun render(insn: SSAInstruction): String = buildString {
+        metaInfoFn?.let {
+            val result = it(insn)
+            if (result != null) {
+                appendln(result)
+            }
+        }
         append("$pad ")
         append(when (insn) {
             is SSACallSite -> renderCallSite(insn)
@@ -100,8 +106,14 @@ class SSARender {
     }
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {
-        fun renderCallSiteArgs(insn: SSACallSite) =
-                "${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
+        fun renderCallSiteArgs(insn: SSACallSite): String {
+            val operands = if (insn.receiver == SSAGlobalReceiver) {
+                insn.args
+            } else {
+                insn.operands
+            }
+            return "${insn.callee.name} ${operands.joinToString { renderOperand(it) }}"
+        }
 
         append(when (insn) {
             is SSAInvoke ->   "${renderInsnResult(insn)} = invoke ${renderCallSiteArgs(insn)} to ${renderOperand(insn.continuation)} except ${renderOperand(insn.exception)}"

@@ -21,14 +21,14 @@ object SSAStringType : ReferenceType()
 
 object SSANothingType: ReferenceType()
 
-class SSAClass(
-        val origin: IrClass,
-        val superTypes: List<SSAClass>,
-        val vtable: List<SSAFunction>,
-        val itable: List<SSAFunction>,
-        val isFinal: Boolean,
-        val isAbstact: Boolean
-) : ReferenceType()
+class SSAClass : ReferenceType() {
+    lateinit var origin: IrClass
+    var superTypes = mutableListOf<SSAClass>()
+    var vtable = mutableListOf<SSAFunction>()
+    var itable =  mutableListOf<SSAFunction>()
+    var isFinal: Boolean = false
+    var isAbstact: Boolean = false
+}
 
 class SSAWrapperType(val irType: IrType): SSAType
 

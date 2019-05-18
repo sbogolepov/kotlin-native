@@ -31,21 +31,26 @@ internal class SSATypeMapper(val context: Context) {
             irType.isNothing() -> SSANothingType
             irType.isString() -> SSAStringType
             irType.classifierOrNull != null -> {
-                val classifier = irType.getClass()!!
+                val classifier = irType.getClass()
+                        ?: return SSAWrapperType(irType)
                 if (irType.isAny()) {
 
                 }
-                createClass(classifier)
+                val klass = SSAClass()
+                typeCache[irType] = klass
+                createClass(klass, classifier)
             }
             else -> SSAWrapperType(irType)
         }
     }
 
     fun mapClass(irClass: IrClass) = typeCache.getOrPut(irClass.defaultType) {
-        createClass(irClass)
+        val klass = SSAClass()
+        typeCache[irClass.defaultType] = klass
+        createClass(klass, irClass)
     } as SSAClass
 
-    private fun createClass(irClass: IrClass): SSAClass {
+    private fun createClass(klass: SSAClass, irClass: IrClass): SSAClass {
         val isAbstact = irClass.isAbstract()
         val isFinal = irClass.isFinalClass
         val superTypes = irClass.superTypes.map { mapClass(it.getClass()!!) }
@@ -58,7 +63,14 @@ internal class SSATypeMapper(val context: Context) {
         } else {
             Pair(listOf(), listOf())
         }
-        return SSAClass(irClass, superTypes, vtable, itable, isAbstact, isFinal)
+        return klass.also {
+            it.origin = irClass
+            it.isAbstact = isAbstact
+            it.isFinal = isFinal
+            it.vtable = vtable.toMutableList()
+            it.itable = itable.toMutableList()
+            it.superTypes = superTypes.toMutableList()
+        }
     }
 
     private fun mapFunctionType(irFunction: IrFunction): SSAFuncType =

@@ -114,7 +114,15 @@ internal sealed class GenerationContext<T>(
 
         override fun emitReturn(value: SSAValue, target: IrReturnTarget) =
                 with(builder) {
-                    SSAReturn(value, curBlock).add()
+                    val returnBlock = function.returnBlock
+                    if (returnBlock.params.isEmpty()) {
+                        returnBlock.addParam(function.type.returnType)
+                        returnBlock.body += SSAReturn(returnBlock.params[0], returnBlock)
+                        returnBlock.sealed = true
+                    }
+                    builder.addBr(returnBlock).apply {
+                        edge.args += value
+                    }
                 }
 
         override fun complete(result: Unit): SSAValue {

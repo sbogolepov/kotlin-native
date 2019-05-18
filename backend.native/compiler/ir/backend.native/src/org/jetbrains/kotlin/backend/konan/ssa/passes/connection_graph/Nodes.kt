@@ -82,15 +82,20 @@ sealed class CGObjectNode : CGNode {
     fun getFieldReferenceFor(field: SSAField): CGReferenceNode.Field =
             fieldToFieldReference.getOrPut(field) { CGReferenceNode.Field(this, field) }.also { addField(it) }
 
-    class Constant(val constant: SSAConstant) : CGObjectNode()
+    class Constant(val constant: SSAConstant) : CGObjectNode() {
+        override fun toString() = "CG ObjectNode::Constant"
+    }
 
     class Phantom(val reference: CGReferenceNode) : CGObjectNode() {
         init {
             attachTo(reference)
         }
+        override fun toString() = "CG ObjectNode::Phantom"
     }
 
-    class Object(val allocSite: SSAAlloc) : CGObjectNode()
+    class Object(val allocSite: SSAAlloc) : CGObjectNode() {
+        override fun toString() = "CG ObjectNode::Object"
+    }
 }
 
 sealed class CGReferenceNode : CGNode {
@@ -171,32 +176,46 @@ sealed class CGReferenceNode : CGNode {
         }
     }
 
-    class Local(val value: SSAValue) : CGReferenceNode()
+    class Local(val value: SSAValue) : CGReferenceNode() {
+        override fun toString() = "CG ReferenceNode::Local"
+    }
 
     class Field(obj: CGObjectNode, val field: SSAField) : CGReferenceNode() {
         init {
             updateEscapeState(obj.escapeState)
             referenceNodeList += this
         }
+
+        override fun toString() = "CG ReferenceNode::Field"
     }
 
-    class Global(val field: SSAField) : CGReferenceNode()
+    class Global(val field: SSAField) : CGReferenceNode() {
+        override fun toString(): String = "CG ReferenceNode::Global"
+    }
 
     sealed class Actual() : CGReferenceNode() {
         class Return : Actual() {
             init {
                 updateEscapeState(EscapeState.Method)
             }
+
+            override fun toString() = "CG ReferenceNode::Actual::Return"
         }
 
-        class CallReturn(val callSite: SSACallSite) : Actual()
+        class CallReturn(val callSite: SSACallSite) : Actual() {
+            override fun toString() = "CG ReferenceNode::Actual::CallReturn"
+        }
 
-        class CallParameter(val callSite: SSACallSite, val index: Int, val value: SSAValue) : Actual()
+        class CallParameter(val callSite: SSACallSite, val index: Int, val value: SSAValue) : Actual() {
+            override fun toString() = "CG ReferenceNode::Actual::CallParameter"
+        }
 
         class FormalParameter(val param: SSAFuncArgument) : Actual() {
             init {
                 updateEscapeState(EscapeState.Method)
             }
+
+            override fun toString() = "CG ReferenceNode::Actual::FormalParameter"
         }
     }
 }

@@ -12,8 +12,13 @@ internal class LLVMTypeMapper(val runtime: Runtime) {
         is SSAFuncType -> mapFunctionalType(ssaType)
         is SSAPrimitiveType -> mapPrimitiveType(ssaType)
         is SSAWrapperType -> mapWrapperType(ssaType)
+        is SSAClass -> mapClassType(ssaType)
         VoidType -> LLVMVoidType()!!
         else -> error("Unsupported SSA type: $ssaType")
+    }
+
+    private fun mapClassType(ssaClass: SSAClass): LLVMTypeRef {
+        TODO()
     }
 
     fun mapReturnType(ssaType: SSAType): LLVMTypeRef = when (ssaType) {

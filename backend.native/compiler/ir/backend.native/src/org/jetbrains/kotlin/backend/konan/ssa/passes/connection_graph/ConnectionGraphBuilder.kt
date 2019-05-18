@@ -1,6 +1,33 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph
 
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.backend.konan.ssa.passes.FunctionPass
+
+class ConnectionGraphBuilderPass() : FunctionPass {
+    override val name: String = "Connection graph building phase"
+
+    override fun apply(function: SSAFunction) {
+        if (!function.name.startsWith("checkMe")) {
+            return
+        }
+
+        val connectionGraph = ConnectionGraphBuilder(function)
+        connectionGraph.build()
+        val allocToEscapeState = connectionGraph.state.nodeToCg
+
+        println("### Escape Analysis results for ${function.name}")
+        val metaInfoFn: (SSAInstruction) -> String? = {
+            val node = allocToEscapeState[it]
+            if (node == null) {
+                null
+            } else {
+                "$node -> ${node.escapeState}"
+            }
+        }
+        println(SSARender(metaInfoFn).render(function))
+        println()
+    }
+}
 
 class GlobalConnectionGraphState {
 
@@ -39,10 +66,11 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
                 CGReferenceNode.Actual.FormalParameter(param)
             }
         }
-        val iter = workingList.iterator()
-        while (iter.hasNext()) {
+
+        while (workingList.isNotEmpty()) {
+            val iter = workingList.iterator()
             val block = iter.next()
-            workingList -= block
+            iter.remove()
             processBlock(block)
         }
     }
@@ -51,39 +79,68 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         block.params.filter { it.type is ReferenceType }.forEach { param ->
             val localRef = CGReferenceNode.getLocalReferenceNode(param)
             state.nodeToCg[param] = localRef
-            param.getIncomingValues().forEach { state.nodeToCg[it]?.attachTo(localRef) }
+            // TODO: Not correct since incoming values may come from unprocessed blocks.
+            //  We should be conservative about unknown incoming value and set it to global escape.
+            //  Then revisit this part again.
+            val (escapeState, converged) = mergeIncomingValues(param.getIncomingValues())
+            localRef.updateEscapeState(escapeState)
+            if (!converged) {
+                // TODO: Add block
+            }
         }
-
         block.body.forEach(::processInsn)
+    }
+
+    private data class MergeResult<T>(val data: T, val converged: Boolean)
+
+    private fun mergeIncomingValues(values: Set<SSAValue>): MergeResult<EscapeState> {
+        var converged = true
+        val max = values.map {
+            state.nodeToCg[it]?.escapeState
+                    ?: EscapeState.Global.also { converged = false }
+        }.max() ?: EscapeState.Global
+        return MergeResult(max, converged)
     }
 
     private fun processInsn(insn: SSAInstruction) {
         handleOperands(insn)
         return when (insn) {
             is SSADeclare -> TODO()
-            is SSAIncRef -> {}
-            is SSADecRef -> {}
-            is SSANOP -> {}
+            is SSAIncRef -> {
+            }
+            is SSADecRef -> {
+            }
+            is SSANOP -> {
+            }
             is SSAVirtualCall -> handleCallSite(insn)
             is SSAInterfaceCall -> handleCallSite(insn)
             is SSADirectCall -> handleCallSite(insn)
             is SSAInvoke -> handleCallSite(insn)
-            is SSAGetITable -> {}
-            is SSAGetVTable -> {}
-            is SSABr -> {}
-            is SSACondBr -> {}
+            is SSAGetITable -> {
+            }
+            is SSAGetVTable -> {
+            }
+            is SSABr -> {
+            }
+            is SSACondBr -> {
+            }
             is SSAReturn -> handleReturn(insn)
             is SSAAlloc -> handleAlloc(insn)
             is SSAGetField -> handleGetField(insn)
             is SSASetField -> handleSetField(insn)
             is SSAGetGlobal -> handleGetGlobal(insn)
             is SSASetGlobal -> handleSetGlobal(insn)
-            is SSAGetObjectValue -> {}
-            is SSACatch -> {}
-            is SSAInstanceOf -> {}
+            is SSAGetObjectValue -> {
+            }
+            is SSACatch -> {
+            }
+            is SSAInstanceOf -> {
+            }
             is SSACast -> handleCast(insn)
-            is SSAIntegerCoercion -> {}
-            is SSANot -> {}
+            is SSAIntegerCoercion -> {
+            }
+            is SSANot -> {
+            }
             is SSAThrow -> handleThrow(insn)
         }
     }
@@ -100,7 +157,8 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
 
     private fun handleThrow(throwInsn: SSAThrow) {
         throwInsn.edge.args.filter { it.type is ReferenceType }.forEach {
-            state.nodeToCg[it]?.updateEscapeState(EscapeState.Global) ?: error("zzz")
+            state.nodeToCg[it]?.updateEscapeState(EscapeState.Global)
+                    ?: error("zzz")
         }
     }
 
@@ -123,7 +181,8 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         val localReference = CGReferenceNode.getLocalReferenceNode(insn)
         state.nodeToCg[insn] = localReference
 
-        val base = state.nodeToCg[insn.receiver] as? CGReferenceNode ?: error("Receiver is not processed.")
+        val base = state.nodeToCg[insn.receiver] as? CGReferenceNode
+                ?: error("Receiver is not processed.")
 
         val pointsTo = base.pointsTo.toMutableSet()
         if (pointsTo.isEmpty()) {
@@ -139,8 +198,10 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
         if (field.type !is ReferenceType) {
             return
         }
-        val base = state.nodeToCg[setField.receiver] as? CGReferenceNode ?: error("Receiver is not processed.")
-        val valueNode = state.nodeToCg[setField.value] ?: error("Field value is not processed.")
+        val base = state.nodeToCg[setField.receiver] as? CGReferenceNode
+                ?: error("Receiver is not processed.")
+        val valueNode = state.nodeToCg[setField.value]
+                ?: error("Field value is not processed.")
 
         val pointsTo = base.pointsTo.toMutableSet()
         if (pointsTo.isEmpty()) {
@@ -163,7 +224,8 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
             return
         }
         val global = CGReferenceNode.getGlobalReferenceNode(setGlobal.global, state.callerActualsAndGlobals)
-        val valueNode = state.nodeToCg[setGlobal.value] ?: error("Global value is not processed.")
+        val valueNode = state.nodeToCg[setGlobal.value]
+                ?: error("Global value is not processed.")
 
         valueNode.attachTo(global)
     }
