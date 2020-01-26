@@ -243,12 +243,12 @@ internal val builtinOperatorPhase = makeKonanFileLoweringPhase(
         prerequisite = setOf(defaultParameterExtentPhase, singleAbstractMethodPhase)
 )
 
-//internal val finallyBlocksPhase = makeKonanFileLoweringPhase(
-//        ::FinallyBlocksLowering,
-//        name = "FinallyBlocks",
-//        description = "Finally blocks lowering",
-//        prerequisite = setOf(initializersPhase, localFunctionsPhase, tailrecPhase)
-//)
+internal val finallyBlocksPhase = makeKonanFileLoweringPhase(
+        ::FinallyBlocksLowering,
+        name = "FinallyBlocks",
+        description = "Finally blocks lowering",
+        prerequisite = setOf(initializersPhase, localFunctionsPhase, tailrecPhase)
+)
 
 internal val testProcessorPhase = makeKonanFileOpPhase(
         { context, irFile -> TestProcessor(context).process(irFile) },
