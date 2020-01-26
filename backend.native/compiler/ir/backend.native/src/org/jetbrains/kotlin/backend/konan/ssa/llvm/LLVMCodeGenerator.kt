@@ -14,9 +14,9 @@ internal class LLVMCodeGenerator(
 
     val llvm = context.llvm
 
-    val builder: LLVMBuilderRef = LLVMCreateBuilder()!!
+    val builder: LLVMBuilderRef = LLVMCreateBuilderInContext(llvmContext)!!
 
-    val intPtrType = LLVMIntPtrType(llvmTargetData)!!
+    val intPtrType = LLVMIntPtrTypeInContext(llvmContext, llvmTargetData)!!
 
     fun positionAtEnd(block: LLVMBasicBlockRef) {
         LLVMPositionBuilderAtEnd(builder, block)

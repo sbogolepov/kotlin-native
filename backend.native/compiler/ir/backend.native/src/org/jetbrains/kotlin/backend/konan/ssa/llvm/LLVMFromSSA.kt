@@ -3,9 +3,14 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
-import org.jetbrains.kotlin.backend.konan.llvm.Runtime
+import org.jetbrains.kotlin.backend.konan.llvm.*
+import org.jetbrains.kotlin.backend.konan.llvm.int16Type
+import org.jetbrains.kotlin.backend.konan.llvm.int1Type
+import org.jetbrains.kotlin.backend.konan.llvm.int8Type
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.backend.konan.ssa.llvm.IntrinsicGenerator
+import org.jetbrains.kotlin.backend.konan.ssa.llvm.IntrinsicGeneratorEnvironment
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 
@@ -42,7 +47,7 @@ private class LLVMFunctionFromSSA(
 
     private val codegen = LLVMCodeGenerator(context, llvmFunc)
 
-    val constTrue = LLVMConstInt(LLVMInt1Type(), 1, 1)!!
+    val constTrue = LLVMConstInt(int1Type, 1, 1)!!
 
     private val intrinsicGenerator = IntrinsicGenerator(object : IntrinsicGeneratorEnvironment {
         override val codegen = this@LLVMFunctionFromSSA.codegen
@@ -55,7 +60,7 @@ private class LLVMFunctionFromSSA(
 
     fun generate(): LLVMValueRef {
         for (block in ssaFunc.blocks) {
-            val bb = LLVMAppendBasicBlock(llvmFunc, block.id.toString())!!
+            val bb = LLVMAppendBasicBlockInContext(llvmContext, llvmFunc, block.id.toString())!!
             blocksMap[block] = bb
             codegen.positionAtEnd(bb)
             block.params.forEach {
@@ -109,15 +114,15 @@ private class LLVMFunctionFromSSA(
             true -> {
                 constTrue
             }
-            false -> LLVMConstInt(LLVMInt1Type(), 0, 1)!!
+            false -> LLVMConstInt(int1Type, 0, 1)!!
         }
-        is SSAConstant.Byte -> LLVMConstInt(LLVMInt8Type(), value.value.toLong(), 1)!!
-        is SSAConstant.Char -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 0)!!
-        is SSAConstant.Short -> LLVMConstInt(LLVMInt16Type(), value.value.toLong(), 1)!!
-        is SSAConstant.Int -> LLVMConstInt(LLVMInt32Type(), value.value.toLong(), 1)!!
-        is SSAConstant.Long -> LLVMConstInt(LLVMInt64Type(), value.value, 1)!!
-        is SSAConstant.Float -> LLVMConstRealOfString(LLVMFloatType(), value.value.toString())!!
-        is SSAConstant.Double -> LLVMConstRealOfString(LLVMDoubleType(), value.value.toString())!!
+        is SSAConstant.Byte -> LLVMConstInt(int8Type, value.value.toLong(), 1)!!
+        is SSAConstant.Char -> LLVMConstInt(int16Type, value.value.toLong(), 0)!!
+        is SSAConstant.Short -> LLVMConstInt(int16Type, value.value.toLong(), 1)!!
+        is SSAConstant.Int -> LLVMConstInt(int32Type, value.value.toLong(), 1)!!
+        is SSAConstant.Long -> LLVMConstInt(int64Type, value.value, 1)!!
+        is SSAConstant.Float -> LLVMConstRealOfString(floatType, value.value.toString())!!
+        is SSAConstant.Double -> LLVMConstRealOfString(doubleType, value.value.toString())!!
         is SSAConstant.String -> codegen.emitStringConst(value.value)
         SSAConstant.Unit -> TODO()
     }

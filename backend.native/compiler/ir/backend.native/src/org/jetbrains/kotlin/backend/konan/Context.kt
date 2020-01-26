@@ -479,7 +479,6 @@ internal class Context(config: KonanConfig) : KonanBackendContext(config) {
     )
 
     val declaredLocalArrays: MutableMap<String, LLVMTypeRef> = HashMap()
-    lateinit var linkStage: LinkStage
 
     lateinit var ssaModule: SSAModule
 }

@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
-import org.jetbrains.kotlin.backend.konan.descriptors.TypedIntrinsic
+import org.jetbrains.kotlin.backend.konan.RuntimeNames
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.*
 import org.jetbrains.kotlin.backend.konan.reportCompilationError
@@ -101,7 +101,7 @@ internal fun tryGetIntrinsicType(callSite: IrFunctionAccessExpression): Intrinsi
 
 private fun getIntrinsicType(callSite: IrFunctionAccessExpression): IntrinsicType {
     val function = callSite.symbol.owner
-    val annotation = function.descriptor.annotations.findAnnotation(TypedIntrinsic)!!
+    val annotation = function.descriptor.annotations.findAnnotation(RuntimeNames.typedIntrinsicAnnotation)!!
     val value = annotation.allValueArguments.getValue(Name.identifier("kind")).value as String
     return IntrinsicType.valueOf(value)
 }
@@ -269,7 +269,7 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
         // Note: LLVM allows to read without padding tail up to byte boundary, but the result seems to be incorrect.
 
         val bitsWithPaddingNum = prefixBitsNum + size + suffixBitsNum
-        val bitsWithPaddingType = LLVMIntType(bitsWithPaddingNum)!!
+        val bitsWithPaddingType = LLVMIntTypeInContext(llvmContext, bitsWithPaddingNum)!!
 
         val bitsWithPaddingPtr = bitcast(org.jetbrains.kotlin.backend.konan.llvm.pointerType(bitsWithPaddingType), gep(ptr, org.jetbrains.kotlin.backend.konan.llvm.Int64(offset / 8).llvm))
         val bitsWithPadding = load(bitsWithPaddingPtr).setUnaligned()
@@ -295,13 +295,13 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
         val value = args[3]
         assert(value.type == int64Type)
 
-        val bitsType = LLVMIntType(size)!!
+        val bitsType = LLVMIntTypeInContext(llvmContext, size)!!
 
         val prefixBitsNum = (offset % 8).toInt()
         val suffixBitsNum = (8 - ((size + offset) % 8).toInt()) % 8
 
         val bitsWithPaddingNum = prefixBitsNum + size + suffixBitsNum
-        val bitsWithPaddingType = LLVMIntType(bitsWithPaddingNum)!!
+        val bitsWithPaddingType = LLVMIntTypeInContext(llvmContext, bitsWithPaddingNum)!!
 
         // 0011111000:
         val discardBitsMask = LLVMConstShl(
@@ -343,7 +343,7 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
         return when (val typeKind = LLVMGetTypeKind(first.type)) {
             LLVMTypeKind.LLVMFloatTypeKind, LLVMTypeKind.LLVMDoubleTypeKind -> {
                 val numBits = LLVMSizeOfTypeInBits(codegen.llvmTargetData, first.type).toInt()
-                val integerType = LLVMIntType(numBits)!!
+                val integerType = LLVMIntTypeInContext(llvmContext, numBits)!!
                 icmpEq(bitcast(integerType, first), bitcast(integerType, second))
             }
             LLVMTypeKind.LLVMIntegerTypeKind, LLVMTypeKind.LLVMPointerTypeKind -> icmpEq(first, second)

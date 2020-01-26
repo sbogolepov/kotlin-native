@@ -2,15 +2,14 @@ package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.backend.common.ir.isFinalClass
 import org.jetbrains.kotlin.backend.konan.Context
-import org.jetbrains.kotlin.backend.konan.KonanBackendContext
 import org.jetbrains.kotlin.backend.konan.descriptors.isAbstract
 import org.jetbrains.kotlin.backend.konan.ir.allParameters
-import org.jetbrains.kotlin.backend.konan.ir.isAnonymousObject
 import org.jetbrains.kotlin.backend.konan.ir.isOverridable
-import org.jetbrains.kotlin.backend.konan.ir.name
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.defaultType
+import org.jetbrains.kotlin.ir.util.isAnonymousObject
+import org.jetbrains.kotlin.ir.util.nameForIrSerialization
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
@@ -56,7 +55,7 @@ internal class SSATypeMapper(val context: Context) {
         val superTypes = irClass.superTypes.map { mapClass(it.getClass()!!) }
         // TODO: Use pass over SSA instead
         val (vtable, itable) = if (!isAbstact) {
-            val vtableBuilder = context.getVtableBuilder(irClass)
+            val vtableBuilder = context.getLayoutBuilder(irClass)
             val vtable = vtableBuilder.vtableEntries.map { mapFunction(it.getImplementation(context)!!) }
             val itable = vtableBuilder.methodTableEntries.map { mapFunction(it.getImplementation(context)!!) }
             Pair(vtable, itable)
@@ -83,12 +82,12 @@ internal class SSATypeMapper(val context: Context) {
             SSAFunction(irFunction.name.asString(), mapFunctionType(irFunction))
 }
 
-private fun getLocalName(parent: FqName, descriptor: IrDeclaration): Name {
-    if (descriptor.isAnonymousObject) {
+private fun getLocalName(parent: FqName, declaration: IrDeclaration): Name {
+    if (declaration.isAnonymousObject) {
         return Name.identifier("anon")
     }
 
-    return descriptor.name
+    return declaration.nameForIrSerialization
 }
 
 private fun getFqName(descriptor: IrDeclaration): FqName {

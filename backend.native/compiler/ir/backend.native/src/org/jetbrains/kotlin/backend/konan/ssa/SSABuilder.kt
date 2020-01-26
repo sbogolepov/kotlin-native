@@ -1,7 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.backend.common.ir.ir2string
-import org.jetbrains.kotlin.backend.konan.ir.constructedClass
 import org.jetbrains.kotlin.backend.konan.ir.isOverridable
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
@@ -259,6 +258,8 @@ internal class SSAFunctionBuilderImpl(
                 IrTypeOperator.INSTANCEOF -> evaluateInstanceOf(irExpr)
                 IrTypeOperator.NOT_INSTANCEOF -> evaluateNotInstanceOf(irExpr)
                 IrTypeOperator.SAM_CONVERSION -> TODO(ir2string(irExpr))
+                IrTypeOperator.IMPLICIT_DYNAMIC_CAST -> TODO("")
+                IrTypeOperator.REINTERPRET_CAST -> TODO("")
             }
 
     private fun evaluateCast(irExpr: IrTypeOperatorCall): SSAValue =
@@ -439,7 +440,7 @@ internal class SSAFunctionBuilderImpl(
 
     private fun generateConstructorCall(irCall: IrCall): SSAValue {
         val constructor = irCall.symbol.owner as IrConstructor
-        val irClass = (irCall.symbol as IrConstructorSymbol).owner.constructedClass
+        val irClass = constructor.parent as IrClass
 
         val ssaClass = typeMapper.mapClass(irClass)
         val allocationSite = +SSAAlloc(ssaClass, curBlock)

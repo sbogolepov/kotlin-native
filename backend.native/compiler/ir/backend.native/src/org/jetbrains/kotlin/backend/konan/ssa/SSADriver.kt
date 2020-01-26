@@ -1,10 +1,12 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import llvm.DICreateBuilder
-import llvm.LLVMModuleCreateWithName
+import llvm.LLVMContextCreate
+import llvm.LLVMCreateDIBuilder
+import llvm.LLVMModuleCreateWithNameInContext
 import org.jetbrains.kotlin.backend.common.phaser.namedIrModulePhase
 import org.jetbrains.kotlin.backend.common.phaser.then
 import org.jetbrains.kotlin.backend.konan.llvm.createLlvmDeclarations
+import org.jetbrains.kotlin.backend.konan.llvm.llvmContext
 import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
 import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
@@ -49,9 +51,9 @@ private val llvmFromSsaPhase = makeKonanModuleOpPhase(
         name = "SsaToLlvm",
         description = "Generate LLVM IR from SSA IR",
         op = { context, irModuleFragment ->
-            val llvmModule = LLVMModuleCreateWithName("out")!! // TODO: dispose
-            context.llvmModule = llvmModule
-            context.debugInfo.builder = DICreateBuilder(llvmModule)
+            llvmContext = LLVMContextCreate()!!
+            val llvmModule = LLVMModuleCreateWithNameInContext("out", llvmContext)!! // TODO: dispose
+            context.debugInfo.builder = LLVMCreateDIBuilder(llvmModule)
             context.llvmDeclarations = createLlvmDeclarations(context)
             context.lifetimes = mutableMapOf()
             LLVMModuleFromSSA(context, context.ssaModule).generate()
