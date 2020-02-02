@@ -21,6 +21,11 @@ class UnreachableBlockElimination : FunctionPass {
         block.succs.forEach {
             it.to.preds.remove(it)
         }
+        block.body.forEach { insn ->
+            insn.operands.forEach { operand ->
+                operand.users -= insn
+            }
+        }
         function.blocks.remove(block)
     }
 }
