@@ -116,7 +116,7 @@ internal class IntrinsicGenerator(private val environment: IntrinsicGeneratorEnv
         get() = LLVMGetReturnType(codegen.getLlvmFunctionType(symbol.owner))!!
 
     fun evaluateCall(callSite: SSACallSite, args: List<LLVMValueRef>): LLVMValueRef =
-            environment.codegen.evaluateCall(callSite.irOrigin, args)
+            environment.codegen.evaluateCall(callSite.irOrigin as IrCall, args)
 
     // Assuming that we checked for `TypedIntrinsic` annotation presence.
     private fun LLVMCodeGenerator.evaluateCall(callSite: IrCall, args: List<LLVMValueRef>): LLVMValueRef =

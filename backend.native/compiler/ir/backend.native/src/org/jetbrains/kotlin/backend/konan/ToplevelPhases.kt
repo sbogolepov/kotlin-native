@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.backend.common.serialization.DescriptorTable
+import org.jetbrains.kotlin.backend.konan.ssa.ssaPhase
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.konan.isNativeStdlib
 import org.jetbrains.kotlin.ir.declarations.IrFile
@@ -455,6 +456,7 @@ private val backendCodegen = namedUnitPhase(
                 dependenciesLowerPhase then // Then lower all libraries in topological order.
                                             // With that we guarantee that inline functions are unlowered while being inlined.
                 entryPointPhase then
+                ssaPhase then
                 bitcodePhase then
                 verifyBitcodePhase then
                 printBitcodePhase then
@@ -524,5 +526,7 @@ internal fun PhaseConfig.konanPhasesConfig(config: KonanConfig) {
         disableIf(destroySymbolTablePhase, isDescriptorsOnlyLibrary)
         disableIf(copyDefaultValuesToActualPhase, isDescriptorsOnlyLibrary)
         disableIf(backendCodegen, isDescriptorsOnlyLibrary)
+
+        disableIf(ssaPhase, getBoolean(KonanConfigKeys.SSA) == false)
     }
 }

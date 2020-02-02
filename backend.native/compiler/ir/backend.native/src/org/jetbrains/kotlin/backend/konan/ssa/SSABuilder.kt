@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.backend.konan.ir.isOverridable
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArguments
 import org.jetbrains.kotlin.ir.util.isInterface
@@ -27,7 +26,8 @@ class SSABlockIdGenerator {
 internal class SSAFunctionBuilderImpl(
         override val function: SSAFunction,
         val module: SSAModule,
-        override val typeMapper: SSATypeMapper) : SSAFunctionBuilder {
+        override val typeMapper: SSATypeMapper
+) : SSAFunctionBuilder {
 
     override var generationContext: GenerationContext<*> =
             GenerationContext.Function(this, null)
@@ -213,12 +213,14 @@ internal class SSAFunctionBuilderImpl(
     override fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
         is IrTypeOperatorCall -> evalTypeOperatorCall(irExpr)
         is IrCall -> evalCall(irExpr)
+        is IrConstructorCall -> evalConstructorCall(irExpr)
         is IrDelegatingConstructorCall -> evalDelegatingConstructorCall(irExpr)
         is IrGetValue -> evalGetValue(irExpr)
         is IrConst<*> -> evalConstant(irExpr)
         is IrReturn -> evalReturn(irExpr)
         is IrGetObjectValue -> evalGetObjectValue(irExpr)
         is IrWhileLoop -> evalWhileLoop(irExpr)
+        is IrDoWhileLoop -> evalDoWhileLoop(irExpr)
         is IrWhen -> evalWhen(irExpr)
         is IrSetVariable -> evalSetVariable(irExpr)
         is IrReturnableBlock     -> evalReturnableBlock(irExpr)
@@ -230,6 +232,7 @@ internal class SSAFunctionBuilderImpl(
         is IrBreak -> evalBreak(irExpr)
         is IrVararg -> evalVararg(irExpr)
         is IrContinue -> evalContinue(irExpr)
+
         else -> TODO("$irExpr")
     }
 
@@ -338,21 +341,43 @@ internal class SSAFunctionBuilderImpl(
                 addBlock(this)
             }
 
-            addBr(loopEntry)
+            addBr(loopCondition)
 
-            curBlock = loopEntry
+            curBlock = loopCondition
             val condition = evalExpression(irLoop.condition)
             addCondBr(condition, loopBody, loopExit)
 
             curBlock = loopBody
             seal(loopBody)
             irLoop.body?.let { generateStatement(it) }
-            addBr(loopEntry)
-            seal(loopEntry)
+            addBr(loopCondition)
+            seal(loopCondition)
 
             curBlock = loopExit
             seal(loopExit)
         }
+
+    private fun evalDoWhileLoop(irLoop: IrDoWhileLoop): SSAValue =
+            generationContext.inLoop(irLoop) {
+                val loopBody = createBlock("loop_body").apply {
+                    addBlock(this)
+                }
+                addBr(loopBody)
+                curBlock = loopBody
+                irLoop.body?.let { generateStatement(it) }
+                addBr(loopCondition)
+
+                curBlock = loopCondition
+                val condition = evalExpression(irLoop.condition)
+                addCondBr(condition, loopBody, loopExit)
+
+                seal(loopBody)
+                seal(loopCondition)
+
+                curBlock = loopExit
+                seal(loopExit)
+            }
+
 
     override fun addBr(to: SSABlock): SSABr =
             +SSABr(SSAEdge(curBlock, to), curBlock)
@@ -403,7 +428,6 @@ internal class SSAFunctionBuilderImpl(
         // Dirty hack against ugly state of incoming IR.
         if (curBlock.body.lastOrNull()?.isTerminal() == true) {
             curBlock = createBlock("unreachable").apply {
-//                addBlock(this)
                 sealed = true
             }
         }
@@ -416,9 +440,11 @@ internal class SSAFunctionBuilderImpl(
         return this
     }
 
+    private fun evalConstructorCall(irConstructorCall: IrConstructorCall): SSAValue =
+            generateConstructorCall(irConstructorCall)
+
     private fun evalCall(irCall: IrCall): SSAValue {
         val function = irCall.symbol.owner
-        if (function is IrConstructor) return generateConstructorCall(irCall)
 
         val args = (irCall.getArguments()).map { (_, paramExpr) ->
             evalExpression(paramExpr)
@@ -438,8 +464,8 @@ internal class SSAFunctionBuilderImpl(
         }
     }
 
-    private fun generateConstructorCall(irCall: IrCall): SSAValue {
-        val constructor = irCall.symbol.owner as IrConstructor
+    private fun generateConstructorCall(irCall: IrConstructorCall): SSAValue {
+        val constructor = irCall.symbol.owner
         val irClass = constructor.parent as IrClass
 
         val ssaClass = typeMapper.mapClass(irClass)

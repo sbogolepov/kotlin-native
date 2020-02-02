@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
 import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
 import org.jetbrains.kotlin.backend.konan.ssa.passes.UnitReturnsLoweringPass
+import org.jetbrains.kotlin.backend.konan.ssa.passes.UnreachableBlockElimination
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilder
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilderPass
 
@@ -18,6 +19,7 @@ private val ssaGenerationPhase = makeKonanModuleOpPhase(
         name = "IrToSsa",
         description = "Generate SSA IR from HIR",
         op = { context, irModuleFragment ->
+            llvmContext = LLVMContextCreate()!!
             context.ssaModule = SSAModuleBuilder(context).build(irModuleFragment)
             println(SSARender().render(context.ssaModule))
         }
@@ -28,6 +30,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
         description = "Run lowering passes over SSA IR",
         op = { context, irModuleFragment ->
             val passes = listOf(
+                    UnreachableBlockElimination(),
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
                     ConnectionGraphBuilderPass()
@@ -37,7 +40,7 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                     when (pass.applyChecked(it)) {
                         ValidationResult.Error -> {
                             println(SSARender().render(it))
-                            error("Error validating function ${it.name}")
+//                            error("Error validating function ${it.name}")
                         }
                     }
                 }
@@ -51,7 +54,6 @@ private val llvmFromSsaPhase = makeKonanModuleOpPhase(
         name = "SsaToLlvm",
         description = "Generate LLVM IR from SSA IR",
         op = { context, irModuleFragment ->
-            llvmContext = LLVMContextCreate()!!
             val llvmModule = LLVMModuleCreateWithNameInContext("out", llvmContext)!! // TODO: dispose
             context.debugInfo.builder = LLVMCreateDIBuilder(llvmModule)
             context.llvmDeclarations = createLlvmDeclarations(context)

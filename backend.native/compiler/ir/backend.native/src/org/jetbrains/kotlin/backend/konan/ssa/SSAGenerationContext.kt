@@ -30,7 +30,7 @@ internal sealed class GenerationContext<T>(
             val loop: IrLoop
     ) : GenerationContext<Unit>(builder, parent), LoopContext {
 
-        val loopEntry = builder.createBlock("loop_entry").apply {
+        val loopCondition = builder.createBlock("loop_condition").apply {
             builder.addBlock(this)
         }
 
@@ -48,7 +48,7 @@ internal sealed class GenerationContext<T>(
 
         override fun emitContinue(irContinue: IrContinue) {
             if (irContinue.loop == loop) {
-                builder.addBr(loopEntry)
+                builder.addBr(loopCondition)
             } else {
                 parent.getLoop().emitContinue(irContinue)
             }

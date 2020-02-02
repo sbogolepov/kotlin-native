@@ -1,6 +1,7 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 
 // Instruction interface rules:
 //  1. Named operands should be expressed as properties pointing at element at operands list
@@ -72,7 +73,7 @@ interface SSAReceiverAccessor {
 
 sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = mutableListOf()) : SSAInstruction(owner, operands) {
     abstract val callee: SSACallable
-    abstract val irOrigin: IrCall
+    abstract val irOrigin: IrFunctionAccessExpression
 
     override val type: SSAType
         get() = callee.type.returnType
@@ -113,7 +114,7 @@ class SSADirectCall(
         args: List<SSAValue>,
         override val callee: SSACallable,
         owner: SSABlock,
-        override val irOrigin: IrCall
+        override val irOrigin: IrFunctionAccessExpression
 ) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())) {
 
     override val receiver: SSAValue
