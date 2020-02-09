@@ -99,6 +99,10 @@ internal annotation class PointsTo(vararg val onWhom: Int)
 @Retention(AnnotationRetention.BINARY)
 internal annotation class TypedIntrinsic(val kind: String)
 
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.BINARY)
+public annotation class SSA()
+
 /**
  * Indicates that `@SymbolName external` function is implemented in library-stored bitcode
  * and doesn't have native dependencies.

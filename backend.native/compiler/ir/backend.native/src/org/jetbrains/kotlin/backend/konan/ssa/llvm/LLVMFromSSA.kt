@@ -14,6 +14,9 @@ import org.jetbrains.kotlin.backend.konan.ssa.llvm.IntrinsicGeneratorEnvironment
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 
+fun findSsaFunction(ssaModule: SSAModule, function: IrFunction): SSAFunction? =
+    ssaModule.functions.firstOrNull { it.irOrigin == function }
+
 internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule) {
 
     private val llvmModule = context.llvmModule!!
@@ -29,19 +32,19 @@ internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule)
         LLVMSetDataLayout(llvmModule, runtime.dataLayout)
         LLVMSetTarget(llvmModule, runtime.target)
 
-        for (function in ssaModule.functions) {
-            LLVMFunctionFromSSA(context, function, llvmDeclarations, typeMapper).generate()
-        }
+//        for (function in ssaModule.functions) {
+//            LLVMFunctionFromSSA(context, function, llvmDeclarations, typeMapper).generate()
+//        }
     }
 }
 
-private class LLVMFunctionFromSSA(
+internal class LLVMFunctionFromSSA(
         val context: Context,
         val ssaFunc: SSAFunction,
-        val llvmDeclarations: LLVMDeclarations,
+        val llvmDeclarations: LlvmDeclarations,
         val typeMapper: LLVMTypeMapper) {
 
-    private val llvmFunc = llvmDeclarations.functions.getValue(ssaFunc)
+    private val llvmFunc = llvmDeclarations.forFunction(ssaFunc.irOrigin!!).llvmFunction
 
     private val paramIndex = ssaFunc.params.mapIndexed { index, argument -> argument to index }.toMap()
 
@@ -59,6 +62,7 @@ private class LLVMFunctionFromSSA(
     val blockParamToPhi = mutableMapOf<SSABlockParam, LLVMValueRef>()
 
     fun generate(): LLVMValueRef {
+        println("Emitting ${this.ssaFunc.name}")
         for (block in ssaFunc.blocks) {
             val bb = LLVMAppendBasicBlockInContext(llvmContext, llvmFunc, block.id.toString())!!
             blocksMap[block] = bb
@@ -293,14 +297,14 @@ private class LLVMFunctionFromSSA(
     }
 
     private fun emitMethodCall(insn: SSADirectCall): LLVMValueRef {
-        val callee = llvmDeclarations.functions.getValue(insn.callee)
-        val args = insn.operands.map { emitValue(it) }
+        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin!!).llvmFunction
+        val args = insn.operands.map(this::emitValue)
         return codegen.call(callee, args)
     }
 
     private fun emitMethodInvoke(insn: SSAInvoke): LLVMValueRef {
-        val callee = llvmDeclarations.functions.getValue(insn.callee)
-        val args = insn.operands.map { emitValue(it) }
+        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin!!).llvmFunction
+        val args = insn.operands.map(this::emitValue)
         mapArgsToPhis(insn.continuation)
         mapArgsToPhis(insn.exception)
         val thenBlock = blocksMap.getValue(insn.continuation.to)

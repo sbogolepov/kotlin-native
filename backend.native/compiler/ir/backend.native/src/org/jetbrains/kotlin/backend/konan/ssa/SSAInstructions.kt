@@ -79,8 +79,6 @@ sealed class SSACallSite(owner: SSABlock, operands: MutableList<SSAValue> = muta
         get() = callee.type.returnType
 
     abstract val args: List<SSAValue>
-
-    abstract val receiver: SSAValue
 }
 
 class SSAVirtualCall(
@@ -89,8 +87,6 @@ class SSAVirtualCall(
         owner: SSABlock,
         override val irOrigin: IrCall
 ) : SSACallSite(owner, args.toMutableList()) {
-    override val receiver: SSAValue
-        get() = operands[0]
 
     override val args: List<SSAValue>
         get() = operands.drop(1)
@@ -102,27 +98,24 @@ class SSAInterfaceCall(
         owner: SSABlock,
         override val irOrigin: IrCall
 ) : SSACallSite(owner, args.toMutableList()) {
-    override val receiver: SSAValue
-        get() = operands[0]
 
     override val args: List<SSAValue>
         get() = operands.drop(1)
 }
 
 class SSADirectCall(
-        receiver: SSAValue,
         args: List<SSAValue>,
         override val callee: SSACallable,
         owner: SSABlock,
         override val irOrigin: IrFunctionAccessExpression
-) : SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())) {
-
-    override val receiver: SSAValue
-        get() = operands[0]
+) : SSACallSite(owner, args.toMutableList()) {
 
     override val args: List<SSAValue>
         get() = operands.drop(1)
 }
+
+val SSACallSite.receiver: SSAValue
+    get() = operands[0]
 
 class SSAInvoke(
         receiver: SSAValue,
@@ -133,8 +126,6 @@ class SSAInvoke(
         owner: SSABlock,
         override val irOrigin: IrCall
 ): SSACallSite(owner, mutableListOf(receiver, *args.toTypedArray())) {
-    override val receiver: SSAValue
-        get() = operands[0]
 
     override val args: List<SSAValue>
         get() = operands.drop(1)

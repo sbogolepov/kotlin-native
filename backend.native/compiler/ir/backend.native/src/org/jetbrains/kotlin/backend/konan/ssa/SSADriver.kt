@@ -54,10 +54,6 @@ private val llvmFromSsaPhase = makeKonanModuleOpPhase(
         name = "SsaToLlvm",
         description = "Generate LLVM IR from SSA IR",
         op = { context, irModuleFragment ->
-            val llvmModule = LLVMModuleCreateWithNameInContext("out", llvmContext)!! // TODO: dispose
-            context.debugInfo.builder = LLVMCreateDIBuilder(llvmModule)
-            context.llvmDeclarations = createLlvmDeclarations(context)
-            context.lifetimes = mutableMapOf()
             LLVMModuleFromSSA(context, context.ssaModule).generate()
         }
 )
@@ -66,6 +62,5 @@ internal val ssaPhase = namedIrModulePhase(
         name = "SSA",
         description = "SSA",
         lower = ssaGenerationPhase then
-                ssaLoweringPhase then
-                llvmFromSsaPhase
+                ssaLoweringPhase
 )

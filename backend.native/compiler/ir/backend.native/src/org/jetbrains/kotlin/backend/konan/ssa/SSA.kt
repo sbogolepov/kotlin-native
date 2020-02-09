@@ -19,14 +19,6 @@ interface SSAValue {
     val users: MutableSet<SSAInstruction>
 }
 
-// Hack: receiver for all global members
-object SSAGlobalReceiver : SSAValue {
-    override val users: MutableSet<SSAInstruction> = mutableSetOf()
-    override val type: SSAType = SSASpecialType
-}
-
-fun SSACallSite.isMethod() = receiver != SSAGlobalReceiver
-
 // TODO: Add receiver?
 class SSAField(val name: String, override val type: SSAType) : SSAValue {
     override val users: MutableSet<SSAInstruction> = mutableSetOf()

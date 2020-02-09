@@ -107,12 +107,7 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {
         fun renderCallSiteArgs(insn: SSACallSite): String {
-            val operands = if (insn.receiver == SSAGlobalReceiver) {
-                insn.args
-            } else {
-                insn.operands
-            }
-            return "${insn.callee.name} ${operands.joinToString { renderOperand(it) }}"
+            return "${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
         }
 
         append(when (insn) {

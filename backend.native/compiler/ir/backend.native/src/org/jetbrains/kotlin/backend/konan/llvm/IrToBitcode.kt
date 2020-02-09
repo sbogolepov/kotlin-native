@@ -14,6 +14,9 @@ import org.jetbrains.kotlin.backend.konan.descriptors.*
 import org.jetbrains.kotlin.backend.konan.ir.*
 import org.jetbrains.kotlin.backend.konan.llvm.coverage.LLVMCoverageInstrumentation
 import org.jetbrains.kotlin.backend.konan.optimizations.DataFlowIR
+import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMFunctionFromSSA
+import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMTypeMapper
+import org.jetbrains.kotlin.backend.konan.ssa.llvm.findSsaFunction
 import org.jetbrains.kotlin.builtins.UnsignedType
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
@@ -712,6 +715,14 @@ internal class CodeGeneratorVisitor(val context: Context, val lifetimes: Map<IrE
                 || declaration.isExternal
                 || body == null)
             return
+
+        if (declaration.hasAnnotation(RuntimeNames.ssa)) {
+            findSsaFunction(context.ssaModule, declaration)?.let { ssaFunction ->
+                val typeMapper = LLVMTypeMapper(context.llvm.runtime)
+                LLVMFunctionFromSSA(context, ssaFunction, context.llvmDeclarations, typeMapper).generate()
+                return
+            } ?: println("No SSA for ${declaration.name}")
+        }
 
         generateFunction(codegen, declaration,
                 declaration.location(start = true),

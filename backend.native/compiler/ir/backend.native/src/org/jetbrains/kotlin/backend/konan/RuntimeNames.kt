@@ -20,4 +20,5 @@ object RuntimeNames {
     val kotlinNativeInternalPackageName = FqName.fromSegments(listOf("kotlin", "native", "internal"))
     val associatedObjectKey = FqName("kotlin.reflect.AssociatedObjectKey")
     val typedIntrinsicAnnotation = FqName("kotlin.native.internal.TypedIntrinsic")
+    val ssa = FqName("kotlin.native.internal.SSA")
 }

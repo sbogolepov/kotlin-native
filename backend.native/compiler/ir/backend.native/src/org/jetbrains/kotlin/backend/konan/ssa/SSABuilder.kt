@@ -457,10 +457,10 @@ internal class SSAFunctionBuilderImpl(
             when {
                 dispatchReceiver.type.isInterface() -> +SSAInterfaceCall(args, callee, curBlock, irCall)
                 function is IrSimpleFunction && function.isOverridable -> +SSAVirtualCall(args, callee, curBlock, irCall)
-                else -> +SSADirectCall(args[0], args.drop(1), callee, curBlock, irCall)
+                else -> +SSADirectCall(args, callee, curBlock, irCall)
             }
         } else {
-            +SSADirectCall(SSAGlobalReceiver, args, callee, curBlock, irCall)
+            +SSADirectCall(args, callee, curBlock, irCall)
         }
     }
 
@@ -476,7 +476,7 @@ internal class SSAFunctionBuilderImpl(
         }
 
         val callee = declMapper.mapFunction(constructor)
-        +SSADirectCall(allocationSite, args, callee, curBlock, irCall)
+        +SSADirectCall(allocationSite.let(::listOf) + args, callee, curBlock, irCall)
         return allocationSite
     }
 

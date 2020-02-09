@@ -79,7 +79,7 @@ internal class SSATypeMapper(val context: Context) {
         )
 
     fun mapFunction(irFunction: IrFunction) =
-            SSAFunction(irFunction.name.asString(), mapFunctionType(irFunction))
+            SSAFunction(irFunction.name.asString(), mapFunctionType(irFunction), irFunction)
 }
 
 private fun getLocalName(parent: FqName, declaration: IrDeclaration): Name {
