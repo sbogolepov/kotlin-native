@@ -40,7 +40,8 @@ internal class LlvmDeclarations(
     private val fields: Map<IrField, FieldLlvmDeclarations>,
     private val staticFields: Map<IrField, StaticFieldLlvmDeclarations>,
     private val unique: Map<UniqueKind, UniqueLlvmDeclarations>) {
-    fun forFunction(function: IrFunction) = forFunctionOrNull(function) ?: with(function){error("$name in $file/${parent.fqNameForIrSerialization}")}
+    fun forFunction(function: IrFunction) = forFunctionOrNull(function)
+            ?: with(function){error("$name in $file/${parent.fqNameForIrSerialization}")}
     fun forFunctionOrNull(function: IrFunction) = functions[function]
 
     fun forClass(irClass: IrClass) = classes[irClass] ?:

@@ -3052,6 +3052,16 @@ KRef* LookupTLS(void** key, int index) {
   return start + index;
 }
 
+ObjHeader* HeapAlloc(const TypeInfo* type_info) {
+  RuntimeAssert(type_info->instanceSize_ >= 0, "must be an object");
+  auto* state = memoryState;
+  checkIfGcNeeded(state);
+  auto container = ObjectContainer(state, type_info);
+  ObjHeader* obj = container.GetPlace();
+  rememberNewContainer(container.header());
+  return obj;
+}
+
 
 void GC_RegisterWorker(void* worker) {
 #if USE_CYCLIC_GC

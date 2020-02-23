@@ -1,7 +1,5 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
-import org.jetbrains.kotlin.backend.common.ir.isFinalClass
-import org.jetbrains.kotlin.backend.konan.descriptors.isAbstract
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.types.IrType
 

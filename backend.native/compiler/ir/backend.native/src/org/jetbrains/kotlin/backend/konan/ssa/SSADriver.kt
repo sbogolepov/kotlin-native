@@ -9,9 +9,7 @@ import org.jetbrains.kotlin.backend.konan.llvm.createLlvmDeclarations
 import org.jetbrains.kotlin.backend.konan.llvm.llvmContext
 import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
-import org.jetbrains.kotlin.backend.konan.ssa.passes.InlineAccessorsPass
-import org.jetbrains.kotlin.backend.konan.ssa.passes.UnitReturnsLoweringPass
-import org.jetbrains.kotlin.backend.konan.ssa.passes.UnreachableBlockElimination
+import org.jetbrains.kotlin.backend.konan.ssa.passes.*
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilder
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilderPass
 
@@ -21,7 +19,7 @@ private val ssaGenerationPhase = makeKonanModuleOpPhase(
         op = { context, irModuleFragment ->
             llvmContext = LLVMContextCreate()!!
             context.ssaModule = SSAModuleBuilder(context).build(irModuleFragment)
-            println(SSARender().render(context.ssaModule))
+//            println(SSARender().render(context.ssaModule))
         }
 )
 
@@ -33,20 +31,18 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                     UnreachableBlockElimination(),
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
-                    ConnectionGraphBuilderPass()
+                    ConnectionGraphBuilderPass(),
+                    ReferenceSlotBuilder(context.functionToSlots)
             )
             passes.forEach { pass ->
                 context.ssaModule.functions.forEach {
                     when (pass.applyChecked(it)) {
                         ValidationResult.Error -> {
                             println(SSARender().render(it))
-//                            error("Error validating function ${it.name}")
                         }
                     }
                 }
-                println("${pass.name} completed.")
             }
-            println(SSARender().render(context.ssaModule))
         }
 )
 

@@ -47,7 +47,13 @@ internal class LLVMCodeGenerator(
         return LLVMBuildInvoke(builder, callee, args.toCValues(), args.size, thenBlock, catchBlock, "")!!
     }
 
-    fun heapAlloc(type: LLVMTypeRef): LLVMValueRef = TODO()
+    fun alloca(type: LLVMTypeRef, name: String? = null): LLVMValueRef {
+        return LLVMBuildAlloca(builder, type, name)!!
+    }
+
+    fun heapAlloc(typeInfo: LLVMValueRef): LLVMValueRef {
+        return call(context.llvm.heapAllocFunction, listOf(typeInfo))
+    }
 
     fun condBr(condVal: LLVMValueRef, truBlock: LLVMBasicBlockRef, flsBlock: LLVMBasicBlockRef) =
             LLVMBuildCondBr(builder, condVal, truBlock, flsBlock)!!
@@ -182,4 +188,5 @@ internal class LLVMCodeGenerator(
             LLVMSetCleanup(it, 1)
         }
     }
+
 }

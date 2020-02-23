@@ -433,6 +433,10 @@ void DeinitMemory(MemoryState*);
 MemoryState* SuspendMemory();
 void ResumeMemory(MemoryState* state);
 
+// Trivial Allocation for new SSA backend.
+
+ObjHeader* HeapAlloc(const TypeInfo* typeInfo) RUNTIME_NOTHROW;
+
 //
 // Object allocation.
 //

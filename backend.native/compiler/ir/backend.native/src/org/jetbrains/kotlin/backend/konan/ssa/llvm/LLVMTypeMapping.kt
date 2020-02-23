@@ -9,20 +9,21 @@ import org.jetbrains.kotlin.backend.konan.llvm.voidType
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.ir.types.isUnit
 
-internal class LLVMTypeMapper(val runtime: Runtime) {
+internal class LLVMTypeMapper(
+        val runtime: Runtime,
+        private val llvmDeclarations: LlvmDeclarations
+) {
 
     fun map(ssaType: SSAType): LLVMTypeRef = when (ssaType) {
         is SSAFuncType -> mapFunctionalType(ssaType)
         is SSAPrimitiveType -> mapPrimitiveType(ssaType)
         is SSAWrapperType -> mapWrapperType(ssaType)
-        is SSAClass -> mapClassType(ssaType)
+        is SSAClass -> runtime.objHeaderPtrType
+        SSAAny -> runtime.objHeaderPtrType
         VoidType -> voidType
         else -> error("Unsupported SSA type: $ssaType")
     }
 
-    private fun mapClassType(ssaClass: SSAClass): LLVMTypeRef {
-        TODO()
-    }
 
     fun mapReturnType(ssaType: SSAType): LLVMTypeRef = when (ssaType) {
         is SSAWrapperType -> if (ssaType.irType.isUnit()) voidType else map(ssaType)

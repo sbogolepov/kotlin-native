@@ -24,8 +24,7 @@ class ConnectionGraphBuilderPass() : FunctionPass {
                 "$node -> ${node.escapeState}"
             }
         }
-        println(SSARender(metaInfoFn).render(function))
-        println()
+//        println(SSARender(metaInfoFn).render(function))
     }
 }
 

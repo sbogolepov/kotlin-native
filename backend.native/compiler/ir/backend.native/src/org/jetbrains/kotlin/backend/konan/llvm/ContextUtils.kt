@@ -444,6 +444,7 @@ internal class Llvm(val context: Context, val llvmModule: LLVMModuleRef) {
 
     private fun importRtGlobal(name: String) = importGlobal(name, runtime.llvmModule)
 
+    val heapAllocFunction = importRtFunction("HeapAlloc")
     val allocInstanceFunction = importModelSpecificRtFunction("AllocInstance")
     val allocArrayFunction = importModelSpecificRtFunction("AllocArrayInstance")
     val initInstanceFunction = importModelSpecificRtFunction("InitInstance")

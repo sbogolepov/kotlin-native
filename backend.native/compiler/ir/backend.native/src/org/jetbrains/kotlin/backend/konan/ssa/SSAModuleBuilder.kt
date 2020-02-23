@@ -31,7 +31,6 @@ internal class SSAModuleBuilder(val context: Context) {
         createIndex(irModule)
         val module = SSAModule(irModule.name.asString(), index)
         for ((ir, ssa) in index.functions) {
-            println("Generating ${ir.name}")
             val ssaFunctionBuilderImpl = SSAFunctionBuilderImpl(ssa, module, typeMapper)
             module.functions += ssaFunctionBuilderImpl.build(ir)
             (ssaFunctionBuilderImpl.generationContext as? GenerationContext.Function)?.complete(Unit)

@@ -2,6 +2,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.llvm
 
 import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
+import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonFunction
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
 import org.jetbrains.kotlin.backend.konan.llvm.*
 import org.jetbrains.kotlin.backend.konan.llvm.int16Type
@@ -9,10 +10,8 @@ import org.jetbrains.kotlin.backend.konan.llvm.int1Type
 import org.jetbrains.kotlin.backend.konan.llvm.int8Type
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
-import org.jetbrains.kotlin.backend.konan.ssa.llvm.IntrinsicGenerator
-import org.jetbrains.kotlin.backend.konan.ssa.llvm.IntrinsicGeneratorEnvironment
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 
 fun findSsaFunction(ssaModule: SSAModule, function: IrFunction): SSAFunction? =
     ssaModule.functions.firstOrNull { it.irOrigin == function }
@@ -23,10 +22,6 @@ internal class LLVMModuleFromSSA(val context: Context, val ssaModule: SSAModule)
     private val target = context.config.target
     private val runtimeFile = context.config.distribution.runtime(target)
     private val runtime = Runtime(runtimeFile)
-
-    private val typeMapper = LLVMTypeMapper(runtime)
-
-    private val llvmDeclarations = LLVMDeclarationsBuilder(ssaModule, llvmModule, typeMapper).build()
 
     fun generate() {
         LLVMSetDataLayout(llvmModule, runtime.dataLayout)
@@ -52,17 +47,21 @@ internal class LLVMFunctionFromSSA(
 
     val constTrue = LLVMConstInt(int1Type, 1, 1)!!
 
+    private val slots = context.functionToSlots.getValue(this.ssaFunc)
+
+    private lateinit var llvmSlots: LLVMValueRef
+
     private val intrinsicGenerator = IntrinsicGenerator(object : IntrinsicGeneratorEnvironment {
         override val codegen = this@LLVMFunctionFromSSA.codegen
     })
 
     private fun SSAType.map() = typeMapper.map(this)
+    private val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
+    private val blockParamToPhi = mutableMapOf<SSABlockParam, LLVMValueRef>()
 
-    val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
-    val blockParamToPhi = mutableMapOf<SSABlockParam, LLVMValueRef>()
+
 
     fun generate(): LLVMValueRef {
-        println("Emitting ${this.ssaFunc.name}")
         for (block in ssaFunc.blocks) {
             val bb = LLVMAppendBasicBlockInContext(llvmContext, llvmFunc, block.id.toString())!!
             blocksMap[block] = bb
@@ -70,14 +69,27 @@ internal class LLVMFunctionFromSSA(
             block.params.forEach {
                 blockParamToPhi[it] = codegen.phi(it.type.map())
             }
+            if (block.id == SSABlockId.Entry) {
+                setupSlots()
+            }
         }
         for (block in ssaFunc.blocks) {
-            when {
-                block.id == SSABlockId.LandingPad -> generateLandingPad(block)
+            when (block.id) {
+                SSABlockId.LandingPad -> generateLandingPad(block)
                 else -> generateBlock(block)
             }
         }
         return llvmFunc
+    }
+
+    private fun setupSlots() {
+        val slotCount = slots.allocs.size
+        llvmSlots = LLVMBuildArrayAlloca(codegen.builder, codegen.kObjHeaderPtr, Int32(slotCount).llvm, "")!!
+        val slotsMem = codegen.bitcast(kInt8Ptr, llvmSlots)
+        codegen.call(context.llvm.memsetFunction,
+                listOf(slotsMem, Int8(0).llvm,
+                        Int32(slotCount * codegen.runtime.pointerSize).llvm,
+                        Int1(0).llvm))
     }
 
     private fun generateBlock(block: SSABlock) {
@@ -218,18 +230,20 @@ internal class LLVMFunctionFromSSA(
     // TODO: should we build alloca?
     private fun emitDeclare(insn: SSADeclare): LLVMValueRef {
         val initializer = emitValue(insn.value)
+//        val slot = codegen.alloca(insn.value.type.map(), insn.name)
+//        codegen.store(initializer, slot)
         return initializer
     }
 
     private fun emitCallSite(callSite: SSACallSite): LLVMValueRef {
         val function = callSite.irOrigin.symbol.owner
         return when {
-            function.origin == IrDeclarationOrigin.IR_BUILTINS_STUB -> {
-                val args = callSite.operands.map { emitValue(it) }
+            function.origin == IrBuiltIns.BUILTIN_OPERATOR -> {
+                val args = callSite.operands.map(this::emitValue)
                 evaluateOperatorCall(function, args)
             }
             function.isTypedIntrinsic -> {
-                val args = callSite.operands.map { emitValue(it) }
+                val args = callSite.operands.map(this::emitValue)
                 intrinsicGenerator.evaluateCall(callSite, args)
             }
             else -> when (callSite) {
@@ -249,29 +263,40 @@ internal class LLVMFunctionFromSSA(
             return when {
                 functionSymbol == ib.eqeqeqSymbol -> icmpEq(args[0], args[1])
                 functionSymbol == ib.booleanNotSymbol -> icmpNe(args[0], constTrue)
-//                functionSymbol.isComparisonFunction(ib.greaterFunByOperandType) -> {
-//                    if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
-//                    else icmpGt(args[0], args[1])
-//                }
-//                functionSymbol.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
-//                    if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
-//                    else icmpGe(args[0], args[1])
-//                }
-//                functionSymbol.isComparisonFunction(ib.lessFunByOperandType) -> {
-//                    if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
-//                    else icmpLt(args[0], args[1])
-//                }
-//                functionSymbol.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
-//                    if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
-//                    else icmpLe(args[0], args[1])
-//                }
+                functionSymbol.isComparisonFunction(ib.greaterFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpGt(args[0], args[1])
+                    else icmpGt(args[0], args[1])
+                }
+                functionSymbol.isComparisonFunction(ib.greaterOrEqualFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpGe(args[0], args[1])
+                    else icmpGe(args[0], args[1])
+                }
+                functionSymbol.isComparisonFunction(ib.lessFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpLt(args[0], args[1])
+                    else icmpLt(args[0], args[1])
+                }
+                functionSymbol.isComparisonFunction(ib.lessOrEqualFunByOperandType) -> {
+                    if (args[0].type.isFloatingPoint()) fcmpLe(args[0], args[1])
+                    else icmpLe(args[0], args[1])
+                }
                 else -> error(function.name.toString())
             }
         }
     }
 
     private fun emitAlloc(insn: SSAAlloc): LLVMValueRef {
-        return codegen.heapAlloc(insn.type.map())
+        val typeInfo = when (insn.type) {
+            SSAUnitType -> TODO()
+            SSAAny -> TODO()
+            SSAStringType -> TODO()
+            SSANothingType -> TODO()
+            is SSAClass -> llvmDeclarations.forClass(insn.type.origin).typeInfo.llvm
+        }
+        val slotIndex = slots.allocs.indexOf(insn)
+        val slotPtr = codegen.gep(llvmSlots, Int64(slotIndex.toLong()).llvm)
+        val ptrToAllocatedMemory = codegen.heapAlloc(typeInfo)
+        codegen.store(ptrToAllocatedMemory, slotPtr)
+        return codegen.load(slotPtr)
     }
 
     private fun emitCondBr(insn: SSACondBr): LLVMValueRef {
@@ -290,9 +315,7 @@ internal class LLVMFunctionFromSSA(
     }
 
     private fun emitReturn(insn: SSAReturn): LLVMValueRef {
-        val retval = insn.retVal?.let {
-            emitValue(it)
-        }
+        val retval = insn.retVal?.let(this::emitValue)
         return codegen.ret(retval)
     }
 
