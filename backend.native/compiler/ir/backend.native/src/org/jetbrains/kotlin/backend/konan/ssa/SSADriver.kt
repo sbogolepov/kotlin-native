@@ -31,8 +31,8 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                     UnreachableBlockElimination(),
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
-                    ConnectionGraphBuilderPass(),
-                    ReferenceSlotBuilder(context.functionToSlots)
+                    ConnectionGraphBuilderPass(context.functionToEscapeAnalysisResult),
+                    ReferenceSlotBuilder(context.functionToSlots, context.functionToEscapeAnalysisResult)
             )
             passes.forEach { pass ->
                 context.ssaModule.functions.forEach {

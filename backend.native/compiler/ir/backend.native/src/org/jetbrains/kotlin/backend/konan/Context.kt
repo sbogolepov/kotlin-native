@@ -52,7 +52,9 @@ import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.ir.descriptors.WrappedTypeParameterDescriptor
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
+import org.jetbrains.kotlin.backend.konan.ssa.SSAValue
 import org.jetbrains.kotlin.backend.konan.ssa.passes.Slots
+import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.CGNode
 import org.jetbrains.kotlin.ir.symbols.impl.IrTypeParameterSymbolImpl
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.konan.library.KonanLibraryLayout
@@ -483,6 +485,7 @@ internal class Context(config: KonanConfig) : KonanBackendContext(config) {
     val declaredLocalArrays: MutableMap<String, LLVMTypeRef> = HashMap()
 
     lateinit var ssaModule: SSAModule
+    val functionToEscapeAnalysisResult = mutableMapOf<SSAFunction, Map<SSAValue, CGNode>>()
     val functionToSlots = mutableMapOf<SSAFunction, Slots>()
 }
 

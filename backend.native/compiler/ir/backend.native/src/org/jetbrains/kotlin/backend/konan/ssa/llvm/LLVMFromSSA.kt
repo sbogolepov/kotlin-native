@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.konan.llvm.int1Type
 import org.jetbrains.kotlin.backend.konan.llvm.int8Type
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
+import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.EscapeState
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 
@@ -48,6 +49,7 @@ internal class LLVMFunctionFromSSA(
     val constTrue = LLVMConstInt(int1Type, 1, 1)!!
 
     private val slots = context.functionToSlots.getValue(this.ssaFunc)
+    private val escapeResults = context.functionToEscapeAnalysisResult[ssaFunc]
 
     private lateinit var llvmSlots: LLVMValueRef
 
@@ -84,6 +86,7 @@ internal class LLVMFunctionFromSSA(
 
     private fun setupSlots() {
         val slotCount = slots.allocs.size
+        if (slotCount == 0) return
         llvmSlots = LLVMBuildArrayAlloca(codegen.builder, codegen.kObjHeaderPtr, Int32(slotCount).llvm, "")!!
         val slotsMem = codegen.bitcast(kInt8Ptr, llvmSlots)
         codegen.call(context.llvm.memsetFunction,
@@ -290,11 +293,44 @@ internal class LLVMFunctionFromSSA(
             SSAAny -> TODO()
             SSAStringType -> TODO()
             SSANothingType -> TODO()
-            is SSAClass -> llvmDeclarations.forClass(insn.type.origin).typeInfo.llvm
+            is SSAClass -> llvmDeclarations.forClass(insn.type.origin)
         }
+        return escapeResults?.let {
+            if (it.getValue(insn).escapeState == EscapeState.Local) {
+                stackAlloc(typeInfo)
+            } else {
+                null
+            }
+        } ?: heapAlloc(typeInfo, insn)
+    }
+
+    private fun stackAlloc(typeInfo: ClassLlvmDeclarations): LLVMValueRef {
+        val bodyType = typeInfo.bodyType
+        val memory = codegen.alloca(bodyType)
+        val typeSize = Int32(LLVMSizeOfTypeInBits(codegen.llvmTargetData, bodyType).toInt() / 8)
+        val asRawPtr = codegen.bitcast(int8TypePtr, memory)
+        codegen.call(context.llvm.memsetFunction,
+                listOf(asRawPtr, Int8(0).llvm,
+                        typeSize.llvm,
+                        Int1(0).llvm))
+        val asObjHeader = codegen.bitcast(codegen.kObjHeaderPtr, memory)
+        setTypeInfoForLocalObject(asObjHeader, typeInfo.typeInfo.llvm)
+        return asObjHeader
+    }
+
+    fun setTypeInfoForLocalObject(objectHeader: LLVMValueRef, typeInfoPointer: LLVMValueRef) = with (codegen) {
+        val typeInfo = structGep(objectHeader, 0, "typeInfoOrMeta_")
+        // Set tag OBJECT_TAG_PERMANENT_CONTAINER | OBJECT_TAG_NONTRIVIAL_CONTAINER.
+        val typeInfoValue = intToPtr(or(ptrToInt(typeInfoPointer, codegen.intPtrType),
+                immThreeIntPtrType), kTypeInfoPtr)
+        store(typeInfoValue, typeInfo)
+    }
+
+
+    private fun heapAlloc(typeInfo: ClassLlvmDeclarations, insn: SSAAlloc): LLVMValueRef {
         val slotIndex = slots.allocs.indexOf(insn)
         val slotPtr = codegen.gep(llvmSlots, Int64(slotIndex.toLong()).llvm)
-        val ptrToAllocatedMemory = codegen.heapAlloc(typeInfo)
+        val ptrToAllocatedMemory = codegen.heapAlloc(typeInfo.typeInfo.llvm)
         codegen.store(ptrToAllocatedMemory, slotPtr)
         return codegen.load(slotPtr)
     }

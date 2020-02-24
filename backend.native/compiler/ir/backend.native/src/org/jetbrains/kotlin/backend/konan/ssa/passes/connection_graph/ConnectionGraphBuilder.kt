@@ -3,7 +3,7 @@ package org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.backend.konan.ssa.passes.FunctionPass
 
-class ConnectionGraphBuilderPass() : FunctionPass {
+class ConnectionGraphBuilderPass(val results: MutableMap<SSAFunction, Map<SSAValue, CGNode>>) : FunctionPass {
     override val name: String = "Connection graph building phase"
 
     override fun apply(function: SSAFunction) {
@@ -14,7 +14,7 @@ class ConnectionGraphBuilderPass() : FunctionPass {
         val connectionGraph = ConnectionGraphBuilder(function)
         connectionGraph.build()
         val allocToEscapeState = connectionGraph.state.nodeToCg
-
+        results[function] = allocToEscapeState
         println("### Escape Analysis results for ${function.name}")
         val metaInfoFn: (SSAInstruction) -> String? = {
             val node = allocToEscapeState[it]
@@ -24,7 +24,7 @@ class ConnectionGraphBuilderPass() : FunctionPass {
                 "$node -> ${node.escapeState}"
             }
         }
-//        println(SSARender(metaInfoFn).render(function))
+        println(SSARender(metaInfoFn).render(function))
     }
 }
 
@@ -104,7 +104,7 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
     private fun processInsn(insn: SSAInstruction) {
         handleOperands(insn)
         return when (insn) {
-            is SSADeclare -> TODO()
+            is SSADeclare -> handleDeclare(insn)
             is SSAIncRef -> {
             }
             is SSADecRef -> {
@@ -154,6 +154,12 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
 
     }
 
+    private fun handleDeclare(declare: SSADeclare) {
+        if (declare.value.type !is ReferenceType) return
+        state.nodeToCg[declare] = state.nodeToCg[declare.value]
+                ?: error("zzz")
+    }
+
     private fun handleThrow(throwInsn: SSAThrow) {
         throwInsn.edge.args.filter { it.type is ReferenceType }.forEach {
             state.nodeToCg[it]?.updateEscapeState(EscapeState.Global)
@@ -162,7 +168,8 @@ class ConnectionGraphBuilder(val function: SSAFunction) {
     }
 
     private fun handleCast(cast: SSACast) {
-        state.nodeToCg[cast] = state.nodeToCg[cast.value] ?: error("zzz")
+        state.nodeToCg[cast] = state.nodeToCg[cast.value]
+                ?: error("zzz")
     }
 
     private fun handleCallSite(insn: SSACallSite) {

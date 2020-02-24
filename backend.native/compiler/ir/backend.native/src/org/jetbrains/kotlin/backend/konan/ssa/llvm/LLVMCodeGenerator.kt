@@ -18,6 +18,8 @@ internal class LLVMCodeGenerator(
 
     val intPtrType = LLVMIntPtrTypeInContext(llvmContext, llvmTargetData)!!
 
+    val immThreeIntPtrType = LLVMConstInt(intPtrType, 3, 1)!!
+
     fun positionAtEnd(block: LLVMBasicBlockRef) {
         LLVMPositionBuilderAtEnd(builder, block)
     }
@@ -47,7 +49,7 @@ internal class LLVMCodeGenerator(
         return LLVMBuildInvoke(builder, callee, args.toCValues(), args.size, thenBlock, catchBlock, "")!!
     }
 
-    fun alloca(type: LLVMTypeRef, name: String? = null): LLVMValueRef {
+    fun alloca(type: LLVMTypeRef, name: String? = ""): LLVMValueRef {
         return LLVMBuildAlloca(builder, type, name)!!
     }
 
@@ -60,6 +62,9 @@ internal class LLVMCodeGenerator(
 
     fun gep(base: LLVMValueRef, index: LLVMValueRef, name: String = ""): LLVMValueRef =
             LLVMBuildGEP(builder, base, cValuesOf(index), 1, name)!!
+
+    fun structGep(base: LLVMValueRef, index: Int, name: String = ""): LLVMValueRef =
+            LLVMBuildStructGEP(builder, base, index, name)!!
 
     fun getParam(paramIndex: Int): LLVMValueRef =
             LLVMGetParam(llvmFn, paramIndex)!!
