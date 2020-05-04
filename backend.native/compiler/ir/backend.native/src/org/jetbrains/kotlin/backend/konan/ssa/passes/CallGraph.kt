@@ -45,7 +45,8 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
             } else {
                 val subs = subTypes.getSubClasses(callSite.receiver.type as SSAClass)
                 val callees = subs
-                        .flatMap { it.vtable }
+                        .asSequence()
+                        .flatMap { it.vtable.asSequence() }
                         .filter { it.type == callSite.callee.type && it.name == callSite.callee.name }
                         .onEach { workList.add(it) }
                 CallSite.Virtual(caller, callees.toSet())

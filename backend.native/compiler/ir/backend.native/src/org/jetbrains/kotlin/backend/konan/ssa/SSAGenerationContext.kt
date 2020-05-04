@@ -108,6 +108,9 @@ internal sealed class GenerationContext<T>(
         override fun emitThrow(value: SSAValue) {
             with(builder) {
                 val edge = SSAEdge(builder.curBlock, landingPad, mutableListOf(value))
+                if (landingPad.params.isEmpty()) {
+                    landingPad.addParam(value.type)
+                }
                 SSAThrow(edge, builder.curBlock).add()
             }
         }

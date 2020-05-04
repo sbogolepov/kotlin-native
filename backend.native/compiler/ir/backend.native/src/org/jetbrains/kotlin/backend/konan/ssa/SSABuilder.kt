@@ -206,8 +206,8 @@ internal class SSAFunctionBuilderImpl(
         val value = irVariable.initializer?.let { evalExpression(it) }
         // TODO: explain
                 ?: SSAConstant.Undef
-        val declaration = +SSADeclare(irVariable.name.identifier, value, curBlock)
-        construct.writeVariable(curBlock, irVariable, declaration)
+//        val declaration = +SSADeclare(irVariable.name.identifier, value, curBlock)
+        construct.writeVariable(curBlock, irVariable, value)
     }
 
     override fun evalExpression(irExpr: IrExpression): SSAValue = when (irExpr) {
@@ -427,11 +427,12 @@ internal class SSAFunctionBuilderImpl(
     override fun <T : SSAInstruction> T.add(): T {
         // Dirty hack against ugly state of incoming IR.
         if (curBlock.body.lastOrNull()?.isTerminal() == true) {
-            curBlock = createBlock("unreachable").apply {
-                sealed = true
-            }
+//            curBlock = createBlock("unreachable").apply {
+//                sealed = true
+//            }
+        } else {
+            curBlock.body += this
         }
-        curBlock.body += this
         return this
     }
 

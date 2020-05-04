@@ -11,7 +11,7 @@ class SSAModule(val name: String, val index: SSAModuleIndex) {
 interface SSACallable {
     val name: String
     val type: SSAFuncType
-    val irOrigin: IrFunction?
+    val irOrigin: IrFunction
 }
 
 interface SSAValue {
@@ -58,13 +58,13 @@ sealed class SSAConstant(override val type: SSAType) : SSAValue {
 class SSAVirtualFunction(
         override val name: String,
         override val type: SSAFuncType,
-        override val irOrigin: IrFunction? = null
+        override val irOrigin: IrFunction
 ) : SSACallable
 
 class SSAFunction(
         override val name: String,
         override val type: SSAFuncType,
-        override val irOrigin: IrFunction? = null
+        override val irOrigin: IrFunction
 ) : SSACallable {
     var dispatchReceiver: SSAReceiver? = null
     var extensionReceiver: SSAReceiver? = null
@@ -147,7 +147,7 @@ class SSABlock(val owner: SSAFunction, val id: SSABlockId = SSABlockId.Simple())
 
 fun SSABlockParam.getIncomingValues(): Set<SSAValue> {
     val index = owner.params.indexOf(this)
-    return owner.succs.map { it.args[index] }.toSet()
+    return owner.preds.map { it.args[index] }.toSet()
 }
 
 fun SSAInstruction.isTerminal() = when (this) {

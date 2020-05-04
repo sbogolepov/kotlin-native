@@ -21,6 +21,7 @@ internal class LLVMTypeMapper(
         is SSAClass -> runtime.objHeaderPtrType
         SSAAny -> runtime.objHeaderPtrType
         VoidType -> voidType
+        SSAUnitType -> runtime.objHeaderPtrType
         else -> error("Unsupported SSA type: $ssaType")
     }
 

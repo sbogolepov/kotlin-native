@@ -2998,9 +2998,9 @@ void FreezeSubgraph(ObjHeader* root) {
 // This function is called from field mutators to check if object's header is frozen.
 // If object is frozen or permanent, an exception is thrown.
 void MutationCheck(ObjHeader* obj) {
-  auto* container = obj->container();
-  if (container == nullptr || container->frozen())
-    ThrowInvalidMutabilityException(obj);
+//  auto* container = obj->container();
+//  if (container == nullptr || container->frozen())
+//    ThrowInvalidMutabilityException(obj);
 }
 
 void EnsureNeverFrozen(ObjHeader* object) {

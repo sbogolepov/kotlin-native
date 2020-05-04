@@ -719,7 +719,12 @@ internal class CodeGeneratorVisitor(val context: Context, val lifetimes: Map<IrE
         if (declaration.hasAnnotation(RuntimeNames.ssa) && context.config.configuration.getBoolean(KonanConfigKeys.SSA)) {
             findSsaFunction(context.ssaModule, declaration)?.let { ssaFunction ->
                 val typeMapper = LLVMTypeMapper(context.llvm.runtime, context.llvmDeclarations)
-                LLVMFunctionFromSSA(context, ssaFunction, context.llvmDeclarations, typeMapper).generate()
+                try {
+                    LLVMFunctionFromSSA(context, ssaFunction, context.llvmDeclarations, typeMapper).generate()
+                } catch (e: Throwable) {
+                    println("Failed to generate SSA for ${declaration.name}")
+                    throw e
+                }
                 return
             } ?: println("No SSA for ${declaration.name}")
         }

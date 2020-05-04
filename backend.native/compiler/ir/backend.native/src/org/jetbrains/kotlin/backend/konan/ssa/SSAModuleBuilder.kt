@@ -1,7 +1,9 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import org.jetbrains.kotlin.backend.konan.Context
+import org.jetbrains.kotlin.backend.konan.RuntimeNames
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.util.hasAnnotation
 
 class SSAModuleIndex {
     val functions = mutableListOf<Pair<IrFunction, SSAFunction>>()
@@ -30,7 +32,9 @@ internal class SSAModuleBuilder(val context: Context) {
     fun build(irModule: IrModuleFragment): SSAModule {
         createIndex(irModule)
         val module = SSAModule(irModule.name.asString(), index)
-        for ((ir, ssa) in index.functions) {
+        index.functions
+                .filter { (ir, _) -> ir.hasAnnotation(RuntimeNames.ssa) }
+                .forEach { (ir, ssa) ->
             val ssaFunctionBuilderImpl = SSAFunctionBuilderImpl(ssa, module, typeMapper)
             module.functions += ssaFunctionBuilderImpl.build(ir)
             (ssaFunctionBuilderImpl.generationContext as? GenerationContext.Function)?.complete(Unit)
@@ -53,6 +57,12 @@ internal class SSAModuleBuilder(val context: Context) {
                     methods += it to fn
                 }
             }
+//            if (decl is IrFunction) {
+//                methods += decl to typeMapper.mapFunction(decl)
+//            }
+//            if (decl is IrClass) {
+//                methods += indexClassMethods(decl)
+//            }
         }
         return methods
     }

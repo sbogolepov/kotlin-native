@@ -18,6 +18,51 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
         }
     }
 
+    private fun prepareRendererState(function: SSAFunction) {
+        slotTracker.clear()
+        blockTracker.clear()
+        function.params.forEach {
+            slotTracker.track(it)
+        }
+        for (block in function.blocks) {
+            blockTracker.track(block)
+            for (param in block.params) {
+                slotTracker.track(param)
+            }
+            for (insn in block.body) {
+                slotTracker.track(insn)
+            }
+        }
+    }
+
+    private val SSABlock.nameWithId: String
+        get() = "${id}${blockTracker.slot(this)}"
+
+    fun renderFunctionAsDot(function: SSAFunction): String {
+        prepareRendererState(function)
+        return buildString {
+            appendln("digraph \"${renderFuncHeader(function)}\" {")
+            for (block in function.blocks) {
+                appendln("${block.nameWithId} [shape=box label=\"${renderBlockAsDot(block)}\"];")
+            }
+            for (block in function.blocks) {
+                block.succs.forEach { edge ->
+                    appendln("${edge.from.nameWithId} -> ${edge.to.nameWithId};")
+                }
+            }
+            appendln("}")
+        }
+    }
+
+    private fun renderBlockAsDot(block: SSABlock): String = buildString {
+        append("block ${block.nameWithId}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }}):")
+        append("\\l")
+        for (insn in block.body) {
+            append(render(insn))
+            append("\\l")
+        }
+    }
+
     private fun renderFuncHeader(func: SSAFunction): String =
             "${func.name}(${func.params.joinToString { renderOperand(it) }}): ${renderType(func.type)}"
 
@@ -27,28 +72,13 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     private val blockTracker = SSASlotTracker()
 
-    private fun renderBlock(block: SSABlock) =
-            "${block.id}${blockTracker.slot(block)}"
+    private fun renderBlock(block: SSABlock) = block.nameWithId
 
-    fun render(func: SSAFunction): String {
-        slotTracker.clear()
-        blockTracker.clear()
-        func.params.forEach {
-            slotTracker.track(it)
-        }
-        for (block in func.blocks) {
-            blockTracker.track(block)
-            for (param in block.params) {
-                slotTracker.track(param)
-            }
-            for (insn in block.body) {
-                slotTracker.track(insn)
-            }
-
-        }
+    fun render(function: SSAFunction): String {
+        prepareRendererState(function)
         return buildString {
-            appendln(renderFuncHeader(func))
-            for (block in func.blocks) {
+            appendln(renderFuncHeader(function))
+            for (block in function.blocks) {
                 appendln(render(block))
             }
         }
@@ -58,7 +88,7 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
         get() = slotTracker.slot(this)
 
     private fun render(block: SSABlock): String = buildString {
-        appendln("block ${renderBlock(block)}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }}):")
+        appendln("block ${block.nameWithId}(${block.params.joinToString { "%${slotTracker.slot(it)}: ${renderType(it.type)}" }}):")
         pad = padDelta
         for (insn in block.body) {
             appendln(render(insn))
@@ -84,8 +114,8 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
             is SSANOP ->            "${renderInsnResult(insn)} = NOP \"${insn.comment}\""
             is SSAGetObjectValue -> "${renderInsnResult(insn)} = GET_OBJECT_VALUE"
             is SSAReturn ->         "ret ${if (insn.retVal != null) renderOperand(insn.retVal!!) else ""}"
-            is SSABr ->             "br ${renderOperand(insn.edge)}"
-            is SSACondBr ->         "condbr ${renderOperand(insn.condition)} ${renderOperand(insn.truEdge)} ${renderOperand(insn.flsEdge)}"
+            is SSABr ->             "go ${renderOperand(insn.edge)}"
+            is SSACondBr ->         "if ${renderOperand(insn.condition)} go ${renderOperand(insn.truEdge)} else go ${renderOperand(insn.flsEdge)}"
             is SSASetField ->       "(${renderOperand(insn.receiver)}).${renderOperand(insn.field)} = ${renderOperand(insn.value)}"
             is SSADeclare ->        "${renderInsnResult(insn)} = declare ${insn.name} ${renderOperand(insn.value)}"
             is SSAIncRef -> TODO()
@@ -155,5 +185,11 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
         is SSAConstant.Double   -> const.value.toString()
         is SSAConstant.String   -> "\"${const.value}\""
         else                    -> error("Unsupported constant type: $const")
+    }
+}
+
+private class BlockContentsRenderer() {
+    private fun render(block: SSABlock) {
+
     }
 }

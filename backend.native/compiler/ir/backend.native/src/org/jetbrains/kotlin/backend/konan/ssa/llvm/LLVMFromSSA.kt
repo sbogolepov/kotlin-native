@@ -4,6 +4,9 @@ import llvm.*
 import org.jetbrains.kotlin.backend.konan.Context
 import org.jetbrains.kotlin.backend.konan.descriptors.isComparisonFunction
 import org.jetbrains.kotlin.backend.konan.descriptors.isTypedIntrinsic
+import org.jetbrains.kotlin.backend.konan.descriptors.resolveFakeOverride
+import org.jetbrains.kotlin.backend.konan.ir.isAny
+import org.jetbrains.kotlin.backend.konan.ir.isUnit
 import org.jetbrains.kotlin.backend.konan.llvm.*
 import org.jetbrains.kotlin.backend.konan.llvm.int16Type
 import org.jetbrains.kotlin.backend.konan.llvm.int1Type
@@ -11,8 +14,13 @@ import org.jetbrains.kotlin.backend.konan.llvm.int8Type
 import org.jetbrains.kotlin.backend.konan.llvm.kNullObjHeaderPtr
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.EscapeState
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.util.isInterface
+import org.jetbrains.kotlin.ir.util.parentAsClass
 
 fun findSsaFunction(ssaModule: SSAModule, function: IrFunction): SSAFunction? =
     ssaModule.functions.firstOrNull { it.irOrigin == function }
@@ -61,9 +69,10 @@ internal class LLVMFunctionFromSSA(
     private val blocksMap = mutableMapOf<SSABlock, LLVMBasicBlockRef>()
     private val blockParamToPhi = mutableMapOf<SSABlockParam, LLVMValueRef>()
 
-
-
     fun generate(): LLVMValueRef {
+        SSARender().renderFunctionAsDot(ssaFunc).let { cfgDot ->
+            context.config.tempFiles.create(ssaFunc.name, ".dot").writeText(cfgDot)
+        }
         for (block in ssaFunc.blocks) {
             val bb = LLVMAppendBasicBlockInContext(llvmContext, llvmFunc, block.id.toString())!!
             blocksMap[block] = bb
@@ -71,7 +80,7 @@ internal class LLVMFunctionFromSSA(
             block.params.forEach {
                 blockParamToPhi[it] = codegen.phi(it.type.map())
             }
-            if (block.id == SSABlockId.Entry) {
+            if (block.id is SSABlockId.Entry) {
                 setupSlots()
             }
         }
@@ -86,7 +95,6 @@ internal class LLVMFunctionFromSSA(
 
     private fun setupSlots() {
         val slotCount = slots.allocs.size
-        if (slotCount == 0) return
         llvmSlots = LLVMBuildArrayAlloca(codegen.builder, codegen.kObjHeaderPtr, Int32(slotCount).llvm, "")!!
         val slotsMem = codegen.bitcast(kInt8Ptr, llvmSlots)
         codegen.call(context.llvm.memsetFunction,
@@ -195,7 +203,18 @@ internal class LLVMFunctionFromSSA(
     }
 
     private fun emitGetObjectValue(insn: SSAGetObjectValue): LLVMValueRef {
-        TODO("not implemented")
+        val type = insn.type
+        if (type is SSAUnitType) {
+            return codegen.unique(UniqueKind.UNIT).llvm
+        }
+        if (type !is SSAClass) TODO("Unsupported type: $type")
+
+        val irClass = type.origin
+        if (irClass.isUnit()) {
+            return codegen.unique(UniqueKind.UNIT).llvm
+        } else {
+            TODO("Unsupported class: ${irClass.name}")
+        }
     }
 
     private fun emitSetField(insn: SSASetField): LLVMValueRef {
@@ -251,9 +270,9 @@ internal class LLVMFunctionFromSSA(
             }
             else -> when (callSite) {
                 is SSAInvoke -> emitMethodInvoke(callSite)
-                is SSADirectCall -> emitMethodCall(callSite)
-                is SSAVirtualCall -> error("Should be lowered")
-                is SSAInterfaceCall -> error("Should be lowered")
+                is SSADirectCall -> emitDirectCall(callSite)
+                is SSAVirtualCall -> emitVirtualCall(callSite)
+                is SSAInterfaceCall -> emitInterfaceCall(callSite)
             }
         }
     }
@@ -320,9 +339,7 @@ internal class LLVMFunctionFromSSA(
 
     fun setTypeInfoForLocalObject(objectHeader: LLVMValueRef, typeInfoPointer: LLVMValueRef) = with (codegen) {
         val typeInfo = structGep(objectHeader, 0, "typeInfoOrMeta_")
-        // Set tag OBJECT_TAG_PERMANENT_CONTAINER | OBJECT_TAG_NONTRIVIAL_CONTAINER.
-        val typeInfoValue = intToPtr(or(ptrToInt(typeInfoPointer, codegen.intPtrType),
-                immThreeIntPtrType), kTypeInfoPtr)
+        val typeInfoValue = intToPtr(ptrToInt(typeInfoPointer, codegen.intPtrType), kTypeInfoPtr)
         store(typeInfoValue, typeInfo)
     }
 
@@ -355,14 +372,81 @@ internal class LLVMFunctionFromSSA(
         return codegen.ret(retval)
     }
 
-    private fun emitMethodCall(insn: SSADirectCall): LLVMValueRef {
-        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin!!).llvmFunction
+    private fun emitDirectCall(insn: SSADirectCall): LLVMValueRef {
+        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin).llvmFunction
         val args = insn.operands.map(this::emitValue)
-        return codegen.call(callee, args)
+        val slot = if (codegen.isObjectReturn(callee.type)) {
+            codegen.alloca(codegen.kObjHeaderPtr)
+        } else {
+            null
+        }
+        return codegen.call(callee, args + listOfNotNull(slot))
     }
 
+    private fun emitVirtualCall(insn: SSAVirtualCall): LLVMValueRef =
+            emitVCall(insn.callee.irOrigin, insn.operands)
+
+    private fun IrSimpleFunction.findOverriddenMethodOfAny(): IrSimpleFunction? {
+        if (modality == Modality.ABSTRACT) return null
+        val resolved = resolveFakeOverride()
+        if ((resolved.parent as IrClass).isAny()) {
+            return resolved
+        }
+
+        return null
+    }
+
+    private fun loadTypeInfo(objPtr: LLVMValueRef): LLVMValueRef = with (codegen) {
+        val typeInfoOrMetaPtr = structGep(objPtr, 0  /* typeInfoOrMeta_ */)
+        val typeInfoOrMetaWithFlags = load(typeInfoOrMetaPtr)
+        // Clear two lower bits.
+        val typeInfoOrMetaWithFlagsRaw = ptrToInt(typeInfoOrMetaWithFlags, codegen.intPtrType)
+        val typeInfoOrMetaRaw = and(typeInfoOrMetaWithFlagsRaw, codegen.immTypeInfoMask)
+        val typeInfoOrMeta = intToPtr(typeInfoOrMetaRaw, kTypeInfoPtr)
+        val typeInfoPtrPtr = structGep(typeInfoOrMeta, 0 /* typeInfo */)
+        return load(typeInfoPtrPtr)
+    }
+
+    private fun emitVCall(irFunction: IrFunction, args: List<SSAValue>): LLVMValueRef {
+        val llvmArgs = args.map(this::emitValue)
+        val typeInfoPtr: LLVMValueRef = loadTypeInfo(llvmArgs[0])
+        /*
+         * Resolve owner of the call with special handling of Any methods:
+         * if toString/eq/hc is invoked on an interface instance, we resolve
+         * owner as Any and dispatch it via vtable.
+         */
+        val anyMethod = (irFunction as IrSimpleFunction).findOverriddenMethodOfAny()
+        val owner = (anyMethod ?: irFunction).parentAsClass
+        val methodHash = irFunction.functionName.localHash.llvm
+
+        val llvmMethod = when {
+            !owner.isInterface -> {
+                // If this is a virtual method of the class - we can call via vtable.
+                val index = context.getLayoutBuilder(owner).vtableIndex(anyMethod ?: irFunction)
+                val vtablePlace = codegen.gep(typeInfoPtr, Int32(1).llvm) // typeInfoPtr + 1
+                val vtable = codegen.bitcast(kInt8PtrPtr, vtablePlace)
+                val slot = codegen.gep(vtable, Int32(index).llvm)
+                codegen.load(slot)
+            }
+
+            else -> codegen.call(context.llvm.lookupOpenMethodFunction, listOf(typeInfoPtr, methodHash))
+        }
+        val functionPtrType = pointerType(codegen.getLlvmFunctionType(irFunction))
+        val llvmCallee = codegen.bitcast(functionPtrType, llvmMethod)
+        val llvmArgsWithSlot = if (codegen.isObjectReturn(llvmCallee.type)) {
+            val slot = codegen.alloca(codegen.kObjHeaderPtr)
+            llvmArgs + slot
+        } else {
+            llvmArgs
+        }
+        return codegen.call(llvmCallee, llvmArgsWithSlot)
+    }
+
+    private fun emitInterfaceCall(insn: SSAInterfaceCall): LLVMValueRef =
+            emitVCall(insn.callee.irOrigin, insn.operands)
+
     private fun emitMethodInvoke(insn: SSAInvoke): LLVMValueRef {
-        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin!!).llvmFunction
+        val callee = llvmDeclarations.forFunction(insn.callee.irOrigin).llvmFunction
         val args = insn.operands.map(this::emitValue)
         mapArgsToPhis(insn.continuation)
         mapArgsToPhis(insn.exception)

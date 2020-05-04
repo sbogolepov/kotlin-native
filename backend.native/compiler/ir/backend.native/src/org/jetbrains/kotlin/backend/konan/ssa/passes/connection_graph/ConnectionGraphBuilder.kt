@@ -1,13 +1,17 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph
 
+import org.jetbrains.kotlin.backend.konan.RuntimeNames
 import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.backend.konan.ssa.passes.FunctionPass
+import org.jetbrains.kotlin.ir.util.hasAnnotation
 
-class ConnectionGraphBuilderPass(val results: MutableMap<SSAFunction, Map<SSAValue, CGNode>>) : FunctionPass {
+class ConnectionGraphBuilderPass(
+        private val results: MutableMap<SSAFunction, Map<SSAValue, CGNode>>
+) : FunctionPass {
     override val name: String = "Connection graph building phase"
 
     override fun apply(function: SSAFunction) {
-        if (!function.name.startsWith("checkMe")) {
+        if (function.irOrigin?.hasAnnotation(RuntimeNames.ssa) == false) {
             return
         }
 

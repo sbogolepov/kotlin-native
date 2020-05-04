@@ -1,16 +1,12 @@
 package org.jetbrains.kotlin.backend.konan.ssa
 
 import llvm.LLVMContextCreate
-import llvm.LLVMCreateDIBuilder
-import llvm.LLVMModuleCreateWithNameInContext
 import org.jetbrains.kotlin.backend.common.phaser.namedIrModulePhase
 import org.jetbrains.kotlin.backend.common.phaser.then
-import org.jetbrains.kotlin.backend.konan.llvm.createLlvmDeclarations
 import org.jetbrains.kotlin.backend.konan.llvm.llvmContext
 import org.jetbrains.kotlin.backend.konan.makeKonanModuleOpPhase
 import org.jetbrains.kotlin.backend.konan.ssa.llvm.LLVMModuleFromSSA
 import org.jetbrains.kotlin.backend.konan.ssa.passes.*
-import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilder
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.ConnectionGraphBuilderPass
 
 private val ssaGenerationPhase = makeKonanModuleOpPhase(
@@ -19,7 +15,6 @@ private val ssaGenerationPhase = makeKonanModuleOpPhase(
         op = { context, irModuleFragment ->
             llvmContext = LLVMContextCreate()!!
             context.ssaModule = SSAModuleBuilder(context).build(irModuleFragment)
-//            println(SSARender().render(context.ssaModule))
         }
 )
 
@@ -32,13 +27,17 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
                     ConnectionGraphBuilderPass(context.functionToEscapeAnalysisResult),
+                    ReferenceCountingOperationsPlacementPass(context.functionToEscapeAnalysisResult),
                     ReferenceSlotBuilder(context.functionToSlots, context.functionToEscapeAnalysisResult)
             )
+            val output: (String) -> Unit = ::println
             passes.forEach { pass ->
                 context.ssaModule.functions.forEach {
-                    when (pass.applyChecked(it)) {
-                        ValidationResult.Error -> {
-                            println(SSARender().render(it))
+                    when (val result = pass.applyChecked(it)) {
+                        is ValidationResult.Error -> {
+                            output("Validation failed after ${pass.name}")
+                            result.errors.forEach { output(it) }
+                            output(SSARender().render(it))
                         }
                     }
                 }

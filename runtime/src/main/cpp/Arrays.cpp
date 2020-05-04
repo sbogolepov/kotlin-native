@@ -28,10 +28,10 @@ extern "C" void checkRangeIndexes(KInt from, KInt to, KInt size);
 namespace {
 
 ALWAYS_INLINE inline void mutabilityCheck(KConstRef thiz) {
-  // TODO: optimize it!
-  if (!thiz->local() && thiz->container()->frozen()) {
-    ThrowInvalidMutabilityException(thiz);
-  }
+//  // TODO: optimize it!
+//  if (!thiz->local() && thiz->container()->frozen()) {
+//    ThrowInvalidMutabilityException(thiz);
+//  }
 }
 
 template<typename T>

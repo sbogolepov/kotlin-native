@@ -18,7 +18,8 @@ internal class LLVMCodeGenerator(
 
     val intPtrType = LLVMIntPtrTypeInContext(llvmContext, llvmTargetData)!!
 
-    val immThreeIntPtrType = LLVMConstInt(intPtrType, 3, 1)!!
+    val immTwoIntPtrType = LLVMConstInt(intPtrType, 2, 1)!!
+    val immTypeInfoMask = LLVMConstNot(LLVMConstInt(intPtrType, 3, 0)!!)!!
 
     fun positionAtEnd(block: LLVMBasicBlockRef) {
         LLVMPositionBuilderAtEnd(builder, block)

@@ -1,9 +1,6 @@
 package org.jetbrains.kotlin.backend.konan.ssa.passes
 
-import org.jetbrains.kotlin.backend.konan.ssa.SSAAlloc
-import org.jetbrains.kotlin.backend.konan.ssa.SSABlock
-import org.jetbrains.kotlin.backend.konan.ssa.SSAFunction
-import org.jetbrains.kotlin.backend.konan.ssa.SSAValue
+import org.jetbrains.kotlin.backend.konan.ssa.*
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.CGNode
 import org.jetbrains.kotlin.backend.konan.ssa.passes.connection_graph.EscapeState
 
