@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.backend.konan.ssa.SSAAlloc
 import org.jetbrains.kotlin.backend.konan.ssa.SSAClass
 import org.jetbrains.kotlin.backend.konan.ssa.SSAModule
 
-class TypeCones(private val classHierarchy: Map<SSAClass, List<SSAClass>>) {
+class TypeCones(val classHierarchy: Map<SSAClass, List<SSAClass>>) {
     fun getSubClasses(ssaClass: SSAClass): Set<SSAClass> {
         return classHierarchy.getValue(ssaClass).toSet()
     }

@@ -11,7 +11,7 @@ sealed class CallSite(val caller: SSAFunction, val callees: Set<SSAFunction>) {
 
 class CallGraph(val callSites: Map<SSAFunction, Set<CallSite>>)
 
-class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
+class CallGraphBuilder(val subTypes: Lazy<TypeCones>) : ModulePass<CallGraph> {
     override val name: String = "Call graph builder"
 
     lateinit var workList: WorkList<SSAFunction>
@@ -32,7 +32,8 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
     }
 
     private fun findRoots(module: SSAModule): List<SSAFunction> {
-        return listOf(module.functions.find { it.name == "main" }
+        return listOf(module.functions
+                .find { it.name == "main" }
                 ?: error("No main in module"))
     }
 
@@ -43,7 +44,7 @@ class CallGraphBuilder(val subTypes: TypeCones) : ModulePass<CallGraph> {
                 workList.add(callee)
                 CallSite.Mono(caller, callee)
             } else {
-                val subs = subTypes.getSubClasses(callSite.receiver.type as SSAClass)
+                val subs = subTypes.value.getSubClasses(callSite.receiver.type as SSAClass)
                 val callees = subs
                         .asSequence()
                         .flatMap { it.vtable.asSequence() }

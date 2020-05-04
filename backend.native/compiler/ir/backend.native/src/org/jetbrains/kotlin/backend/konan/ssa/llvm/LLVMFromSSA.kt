@@ -368,8 +368,12 @@ internal class LLVMFunctionFromSSA(
     }
 
     private fun emitReturn(insn: SSAReturn): LLVMValueRef {
-        val retval = insn.retVal?.let(this::emitValue)
-        return codegen.ret(retval)
+        val retval = insn.retVal
+        return when {
+            retval == null -> null
+            retval.type is SSAUnitType -> null
+            else -> retval.let(this::emitValue)
+        }.let(codegen::ret)
     }
 
     private fun emitDirectCall(insn: SSADirectCall): LLVMValueRef {

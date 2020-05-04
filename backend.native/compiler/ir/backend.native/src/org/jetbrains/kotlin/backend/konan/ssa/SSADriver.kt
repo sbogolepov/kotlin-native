@@ -26,18 +26,33 @@ private val ssaLoweringPhase = makeKonanModuleOpPhase(
                     UnreachableBlockElimination(),
                     UnitReturnsLoweringPass(),
                     InlineAccessorsPass(),
+                    wrapPass(TypeConesCollector()) {
+                        context.typeCones = it
+                        dotGraph(
+                                "Type cones",
+                                context.typeCones.classHierarchy.keys.map { it.origin.name.asString() },
+                                context.typeCones.classHierarchy.flatMap { entry -> entry.value.map { entry.key.origin.name.asString() to it.origin.name.asString() } }
+                        ).let { dot -> context.config.tempFiles.create("TypeCones", ".dot").writeText(dot) }
+                    },
+                    wrapPass(CallGraphBuilder(lazy { context.typeCones })) {
+                    },
                     ConnectionGraphBuilderPass(context.functionToEscapeAnalysisResult),
                     ReferenceCountingOperationsPlacementPass(context.functionToEscapeAnalysisResult),
                     ReferenceSlotBuilder(context.functionToSlots, context.functionToEscapeAnalysisResult)
             )
             val output: (String) -> Unit = ::println
             passes.forEach { pass ->
-                context.ssaModule.functions.forEach {
-                    when (val result = pass.applyChecked(it)) {
-                        is ValidationResult.Error -> {
-                            output("Validation failed after ${pass.name}")
-                            result.errors.forEach { output(it) }
-                            output(SSARender().render(it))
+                when (pass) {
+                    is ModulePass<*> -> pass.apply(context.ssaModule)
+                    is FunctionPass -> {
+                        context.ssaModule.functions.forEach {
+                            when (val result = pass.applyChecked(it)) {
+                                is ValidationResult.Error -> {
+                                    output("Validation failed after ${pass.name}")
+                                    result.errors.forEach { output(it) }
+                                    output(SSARender().render(it))
+                                }
+                            }
                         }
                     }
                 }

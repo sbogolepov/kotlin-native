@@ -5,6 +5,13 @@ import org.jetbrains.kotlin.ir.types.IrType
 
 private const val padDelta = " "
 
+fun dotGraph(name: String, nodes: List<String>, edges: List<Pair<String, String>>): String = buildString {
+    appendln("digraph \"${name}\" {")
+    nodes.map { "$it;" }.forEach(this::appendln)
+    edges.map { "${it.first} -> ${it.second};" }.forEach(this::appendln)
+    appendln("}")
+}
+
 class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     fun render(module: SSAModule): String = buildString {
@@ -40,18 +47,11 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     fun renderFunctionAsDot(function: SSAFunction): String {
         prepareRendererState(function)
-        return buildString {
-            appendln("digraph \"${renderFuncHeader(function)}\" {")
-            for (block in function.blocks) {
-                appendln("${block.nameWithId} [shape=box label=\"${renderBlockAsDot(block)}\"];")
-            }
-            for (block in function.blocks) {
-                block.succs.forEach { edge ->
-                    appendln("${edge.from.nameWithId} -> ${edge.to.nameWithId};")
-                }
-            }
-            appendln("}")
-        }
+        return dotGraph(
+            renderFuncHeader(function),
+            function.blocks.map { block -> "${block.nameWithId} [shape=box label=\"${renderBlockAsDot(block)}\"];" },
+            function.blocks.flatMap { it.succs.map { it.from.nameWithId to it.to.nameWithId } }
+        )
     }
 
     private fun renderBlockAsDot(block: SSABlock): String = buildString {
@@ -137,7 +137,7 @@ class SSARender(val metaInfoFn: ((SSAInstruction) -> String?)? = null) {
 
     private fun renderCallSite(insn: SSACallSite): String = buildString {
         fun renderCallSiteArgs(insn: SSACallSite): String {
-            return "${insn.callee.name} ${insn.operands.joinToString { renderOperand(it) }}"
+            return "${insn.callee.name} (${insn.operands.joinToString { renderOperand(it) }})"
         }
 
         append(when (insn) {

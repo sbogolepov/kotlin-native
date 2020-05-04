@@ -28,3 +28,12 @@ interface ModulePass<T> {
 
     fun apply(module: SSAModule): T
 }
+
+inline fun <reified T> wrapPass(pass: ModulePass<T>, crossinline action: (T) -> Unit) =
+        object : ModulePass<T> {
+            override val name: String
+                get() = "Wrapper over ${pass.name}"
+
+            override fun apply(module: SSAModule): T =
+                pass.apply(module).also(action)
+        }
